@@ -303,7 +303,7 @@ function layoutPad(){const pad=$('pad'),ba=$('bAct'),bj=$('bJump'),hint=$('swipe
 let padLbl='';
 function padSync(){const pad=$('pad'),vis=G.mode==='play'&&!G.paused&&!!G.game;if(pad.hidden===vis)pad.hidden=!vis;document.body.classList.toggle('padmode',padOn()&&!G.land);
  if(!vis||!G.game)return;const g=G.game,b=(g.btns&&g.btns())||['JUMP','ACTION'],key=b.join('|');if(key===padLbl)return;padLbl=key;
- const bj=$('bJump'),ba=$('bAct');bj.textContent=b[0]||'JUMP';bj.classList.toggle('dim',!b[0]);ba.textContent=b[1]||'ACTION';ba.classList.toggle('dim',!b[1]);$('swipeHint').innerHTML=(g.hint&&g.hint())||'SWIPE &amp; HOLD ANYWHERE TO MOVE<br>SWIPE UP TO JUMP'}
+ const bj=$('bJump'),ba=$('bAct'),lb=(e,t,d)=>{const dim=!t||t[0]==='~';e.textContent=(t||d).replace('~','');e.classList.toggle('dim',dim)};lb(bj,b[0],'JUMP');lb(ba,b[1],'ACTION');$('swipeHint').innerHTML=(g.hint&&g.hint())||'SWIPE &amp; HOLD ANYWHERE TO MOVE<br>SWIPE UP TO JUMP'}
 addEventListener('keydown',e=>{Sound.unlock();const was=G.keys[e.code];G.keys[e.code]=true;if(was)return;
  if(G.mode==='play'){if(e.code==='Escape'||e.code==='KeyP'){togglePause();return}if(G.paused)return;const g=G.game;if(!g)return;
   if((e.code==='Space'||e.code==='Enter'||e.code==='KeyJ')&&g.act){g.act();e.preventDefault()}
@@ -562,7 +562,7 @@ function DriveGame(cfg){
   for(const c of g.cars){if(c.st==='drive'&&c.d>J.d-40&&c.d<J.d+360){c.st='yield';c.ta=c.a>=0?112:-112;if(Math.abs(c.a)<20)c.ta=J.a>c.a?-112:112}else if(c.st==='stub'&&c.d>J.d-40&&c.d<J.d+360){fxText(g.F,c.a,-c.d-30,'Nyet!','#ff8a7a',12)}}};
  g.down=()=>{};g.move=()=>{};g.up=p=>{};g.swipeJump=false;g.boost=0;g.bcd=0;
  g.jump=()=>{if(!g.started||g.over||g.bcd>0)return;g.boost=1;g.bcd=2.4;Sound.play('jump');fxText(g.F,J.a,-J.d-60,'BOOST!','#ffd23f',14)};
- g.btns=()=>[g.bcd>0?'':'BOOST','SIREN'];g.hint=()=>'SWIPE &amp; HOLD ANYWHERE TO STEER<br>BOOST TO RAM · SIREN TO CLEAR';
+ g.btns=()=>[g.bcd>0?'~BOOST':'BOOST',g.siren>0?'~SIREN':'SIREN'];g.hint=()=>'SWIPE &amp; HOLD ANYWHERE TO STEER<br>BOOST TO RAM · SIREN TO CLEAR';
  g.update=dt=>{g.t+=dt;if(!g.started)return;spawn();const k=g.k();if(g.siren>0)g.siren-=dt;
   /* steering */
   let ta=null;const h=held();
