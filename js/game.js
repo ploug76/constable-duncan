@@ -80,7 +80,7 @@ function stepGait(o,dx,dt,R,on){const ad=on?Math.abs(dx):0;if(dt>0)o.v+=((ad/dt)
 function ik(h,a,L1,L2){let d=Math.hypot(a[0]-h[0],a[1]-h[1]);d=clamp(d,Math.abs(L1-L2)+0.01,L1+L2-0.01);const b=Math.atan2(a[1]-h[1],a[0]-h[0]),off=Math.acos(clamp((L1*L1+d*d-L2*L2)/(2*L1*d),-1,1));
  const k1=[h[0]+L1*Math.cos(b+off),h[1]+L1*Math.sin(b+off)],k2=[h[0]+L1*Math.cos(b-off),h[1]+L1*Math.sin(b-off)];const k=k1[0]>k2[0]?k1:k2;
  const ang=Math.atan2(a[1]-k[1],a[0]-k[0]);return{k,a:[k[0]+Math.cos(ang)*L2,k[1]+Math.sin(ang)*L2]}}
-function pose(o,R){const A0=o.A,A=A0*A0*(3-2*A0),S=R.S,s=Math.min(R.s0,S/(o.D||S/R.s0)),u=o.u,run=clamp((R.s0-s)/(R.s0*0.7),0,1),air=o.air||0;
+function pose(o,R){const A0=o.A,A=A0*A0*(3-2*A0),S=R.S,s=Math.min(R.s0,S/(o.D||S/R.s0)),u=o.u,run=Math.max(clamp((R.s0-s)/(R.s0*0.7),0,1)*(R.vfix?0:1),R.vfix?clamp(((o.v||0)-R.vw)/(R.vr-R.vw),0,1):0),air=o.air||0;
  const by=A*(R.cr0+R.bob*(0.5+0.5*Math.cos(TAU*u*2))*(1-run*0.5)-run*R.bob*0.6*Math.max(0,Math.sin(TAU*u*2)));
  const hy=-R.hipH+by,legs=[],arms=[];
  for(let i=0;i<2;i++){const q=((u+i*0.5)%1+1)%1;let X,Y=0,sw=0;
@@ -99,7 +99,7 @@ function armPts(sh,sa,ea,L1,L2){const e=[sh[0]+Math.sin(sa)*L1,sh[1]+Math.cos(sa
 function shade(hex,f){const n=parseInt(hex.slice(1),16);let r=n>>16,g=(n>>8)&255,b=n&255;r=Math.round(r*f);g=Math.round(g*f);b=Math.round(b*f);return'#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1)}
 function star5(c,x,y,r,col,ol){c.beginPath();for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,rr=i%2?r*0.45:r;c.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr)}c.closePath();c.fillStyle=col;c.fill();if(ol){c.lineWidth=0.6;c.strokeStyle=ol;c.stroke()}}
 /* ---------------- Duncan ---------------- */
-const RD=mkRig({});
+const RD=mkRig({vfix:1,S:52,vw:100,vr:280,cw:0.95,cr:1.42});/* Oct 30 v2: was walk 70 / run 190 (too slow to catch anyone). Longer stride keeps feet planted. */
 const DC={skin:'#eab48c',skinD:'#c98f68',shirt:'#b89d64',shirtD:'#8f7748',ol:'#2e2012',boot:'#18181a',hair:'#dccb9f',hairD:'#a8946a',beard:'#aaa59c'};
 function duncanLegs(c,L,far){const sk=far?DC.skinD:DC.skin,bt=far?'#0d0d0e':DC.boot;
  segO(c,L.h,L.k,5,sk,DC.ol);
@@ -314,7 +314,8 @@ addEventListener('keydown',e=>{Sound.unlock();const was=G.keys[e.code];G.keys[e.
 addEventListener('keyup',e=>{G.keys[e.code]=false});addEventListener('blur',clearInput);document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(G.mode==='play'&&!G.paused)togglePause()}});
 function axisX(){const k=G.keys;return clamp(((k.ArrowRight||k.KeyD)?1:0)-((k.ArrowLeft||k.KeyA)?1:0)+G.pad.ax+touchX(),-1,1)}
 function axisY(){const k=G.keys;return clamp(((k.ArrowDown||k.KeyS)?1:0)-((k.ArrowUp||k.KeyW)?1:0)+G.pad.ay+touchY(),-1,1)}
-function runHeld(){return !!(touchRun()||G.keys.ShiftLeft||G.keys.ShiftRight||Math.abs(G.pad.ax)>0.85||G.pad.btn.x||G.pad.btn.rb)}
+/* hold a direction for a moment (any input) and Duncan breaks into a run */
+function runHeld(dir){const n=G.t;if(!dir||dir!==G._rd||n-(G._rl||0)>0.12){G._rd=dir;G._rs=n}G._rl=n;return !!((dir&&n-G._rs>0.2)||touchRun()||G.keys.ShiftLeft||G.keys.ShiftRight||Math.abs(G.pad.ax)>0.85||G.pad.btn.x||G.pad.btn.rb)}
 function pollPad(){const ps=navigator.getGamepads?navigator.getGamepads():[];let gp=null;for(const p of ps)if(p&&p.connected){gp=p;break}
  const pd=G.pad;pd.prev=pd.btn;pd.btn={};pd.ax=pd.ay=0;if(!gp)return;const b=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed),dz=v=>Math.abs(v)<0.22?0:v;
  pd.ax=clamp(dz(gp.axes[0]||0)+(b(15)?1:0)-(b(14)?1:0),-1,1);pd.ay=clamp(dz(gp.axes[1]||0)+(b(13)?1:0)-(b(12)?1:0),-1,1);
@@ -380,16 +381,16 @@ function SideGame(cfg){
   g.ents.push(e)}
  g.boss=g.ents.find(e=>e.type==='boss');
  g.view=()=>{const land=G.land;const k=land?G.H*0.235/106:Math.min(G.H*0.2,G.W*0.4)/106;const gY=land?G.H*0.86:G.H*0.85;const bgH=land?G.H*1.03:G.H*0.93;return{k,gY,bgH,vw:G.W/k}};
- g.start=()=>{g.started=true;if(g.boss)toast('BOSS: The Great Umbrella!',1800);else if(cfg.toast)toast(cfg.toast,1500)};
+ g.start=()=>{g.started=true;/* spawn safety: start on solid street ground, short blink grace */D.y=0;D.vy=0;D.x=clamp(D.x,40,g.len-40);D.inv=1.5;if(g.boss)toast('BOSS: The Great Umbrella!',1800);else if(cfg.toast)toast(cfg.toast,1500)};
  function hurt(dir){if(D.inv>0||g.over)return;g.hearts--;D.inv=1.4;D.kb=dir*230;D.vy=-120;D.y=-1;Sound.play('hurt');fxText(g.F,D.x,D.y-120,'Ouch!','#ff8a7a',15);if(g.hearts<=0){g.over=true;setTimeout(()=>finish(false,0,cfg.failText||'The troublemakers got the best of you this time. Try again!'),600)}}
  function bust(e){e.st='busted';e.tm=1.1;e.cuffed=true;g.busted++;Sound.play('cuff');setTimeout(()=>Sound.play('bust'),120);D.ov={t:'cuff',tm:0.35};fxBurst(g.F,e.x,-60,14,'star',140,0.8,4,150);
   fxText(g.F,e.x,-150,pick(['BUSTED!','CUFFED!','GOTCHA!']),'#ffd23f',18);if(e.type==='umb')fxText(g.F,e.x,-128,'Umbrella folded!','#fff',11)}
  g.act=()=>{if(g.over||!g.started)return;let best=null,bd=1e9;
   for(const e of g.ents){const dx=Math.abs(e.x-D.x);let r=0;
-   if(e.type==='umb')r=e.st==='open'?108:(e.st==='creep'||e.st==='shake')?66:0;
-   else if((e.type==='antifa'||e.type==='commie'||e.type==='arsonist')&&e.st!=='busted'&&e.st!=='gone')r=52;
-   else if(e.st==='need')r=60;
-   else if(e.type==='boss'&&e.st==='open')r=150;
+   if(e.type==='umb')r=e.st==='open'?120:(e.st==='creep'||e.st==='shake')?84:0;
+   else if((e.type==='antifa'||e.type==='commie'||e.type==='arsonist')&&e.st!=='busted'&&e.st!=='gone')r=90;
+   else if(e.st==='need')r=85;
+   else if(e.type==='boss'&&e.st==='open')r=175;
    if(r&&dx<r&&dx<bd){bd=dx;best=e}}
   if(!best){D.ov={t:'point',tm:0.3};Sound.play('whistle');return}
   D.face=Math.sign(best.x-D.x)||D.face;
@@ -408,7 +409,7 @@ function SideGame(cfg){
   let dir=0,run=false;const h=held();
   if(G.auto){const a=g.autoplay();dir=a.dir;run=a.run}
   else if(h&&!(h.swipe)){const wx=g.cam+h.x/V.k,dx=wx-D.x;if(Math.abs(dx)>10){dir=Math.sign(dx);run=Math.abs(h.x-(D.x-g.cam)*V.k)>G.W*0.26}}
-  else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld()}}
+  else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld(dir)}}
   if(g.over||!g.started||g.won)dir=0;
   if(D.ov){D.ov.tm-=dt;if(D.ov.tm<=0)D.ov=null}
   const sp=run?RD.vr:RD.vw;let vx=dir*sp+D.kb;D.kb*=Math.pow(0.02,dt);if(Math.abs(D.kb)<5)D.kb=0;
@@ -457,7 +458,9 @@ function SideGame(cfg){
     if(e.ov){e.ov.tm-=dt;if(e.ov.t==='throw')e.ov.k=Math.min(1,e.ov.k+dt*5);if(e.ov.tm<=0&&e.ov.t!=='cuffed')e.ov=null}
     if(mv){e.face=mv}else if(e.st!=='busted'&&e.st!=='gone')e.face=Math.sign(dx)||e.face;
     const x0=e.x;e.x=clamp(e.x+mv*sp*dt,22,g.len-(e.type==='arsonist'?140:22));e.o.ov=e.ov;stepGait(e.o,e.x-x0,dt,RP,true);
-    if(e.type==='arsonist'&&e.st!=='busted'&&e.st!=='gone')g.gate=g.len-70}
+    if(e.type==='arsonist'&&e.st!=='busted'&&e.st!=='gone')g.gate=g.len-70;
+    /* run into a fleeing or tired crook and you nab him (no button needed) */
+    if((e.st==='flee'||e.st==='tired')&&Math.abs(e.x-D.x)<38&&D.y>-30&&!g.over)bust(e)}
    else if(e.st==='need'||e.st==='helped'){e.face=Math.sign(dx)||e.face;e.o.ov=e.st==='helped'?{t:'wave'}:(e.type==='granny'?{t:'cane'}:null);let x0=e.x;
     if(e.type==='kid'&&e.st==='helped'){const m=e.mom;if(Math.abs(m.x-e.x)>26){const d=Math.sign(m.x-e.x);e.x+=d*120*dt;e.face=d;e.o.ov=null}else{e.look={...LOOK.kid,mood:'happy'};e.o.ov={t:'hands'}}}
     stepGait(e.o,e.x-x0,dt,e.look&&e.look.kid?RK:RP,true);
@@ -662,7 +665,7 @@ function FireGame(cfg){
  g.update=dt=>{g.t+=dt;if(!g.started)return;const L=g.L(),k=L.k;
   if(g.phase==='hose'){const T=g.tasks()[g.task];let dir=0,run=false;const h=held();
    if(G.auto){const tx=g.hold?T.x:150;dir=Math.abs(tx-D.x)>12?Math.sign(tx-D.x):0;run=true;if(!dir&&g.hold)g.act()}
-   else if(h){const dx=h.x/k-D.x;if(Math.abs(dx)>8){dir=Math.sign(dx);run=Math.abs(dx*k)>G.W*0.22}}else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld()}}
+   else if(h){const dx=h.x/k-D.x;if(Math.abs(dx)>8){dir=Math.sign(dx);run=Math.abs(dx*k)>G.W*0.22}}else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld(dir)}}
    if(dir)D.face=dir;const x0=D.x;D.x=clamp(D.x+dir*(run?RD.vr:RD.vw)*dt,20,L.vw-20);if(D.y<0||D.vy<0){D.vy+=900*dt;D.y+=D.vy*dt;if(D.y>=0){D.y=0;D.vy=0}}stepGait(D.o,D.x-x0,dt,RD,D.y>=0);D.ov=g.hold?{t:'hose'}:null;D.o.ov=D.ov;
    if(!g.hold&&D.x<175){g.hold=true;Sound.play('click');fxText(g.F,D.x,-120,'Got a hose!','#fff',13)}}
   else{/* spray */
@@ -740,7 +743,7 @@ function CatGame(cfg){
   const fc=g.cats.filter(c=>c.st==='fall'||c.st==='warn').sort((a,b)=>(b.st==='fall')-(a.st==='fall')||a.tm-b.tm)[0];
   if(G.auto&&fc){const tx=(L.ox+fc.px*L.S)/k;dir=Math.abs(tx-D.x)>6?Math.sign(tx-D.x):0;run=Math.abs(tx-D.x)>40}
   else if(h){const dx=h.x/k-D.x;if(Math.abs(dx)>6){dir=Math.sign(dx);run=Math.abs(dx*k)>G.W*0.2}}else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld()||true}}
-  if(g.dash>0){g.dash-=dt;dir=D.face;run=true}if(g.dcd>0)g.dcd-=dt;if(dir)D.face=dir;const x0=D.x;D.x=clamp(D.x+dir*(run?RD.vr:RD.vw)*(g.dash>0?1.9:1)*dt,20,L.vw-20);if(D.y<0||D.vy<0){D.vy+=900*dt;D.y+=D.vy*dt;if(D.y>=0){D.y=0;D.vy=0}}D.o.ov={t:'blanket'};stepGait(D.o,D.x-x0,dt,RD,D.y>=0);
+  if(g.dash>0){g.dash-=dt;dir=D.face;run=true}if(g.dcd>0)g.dcd-=dt;if(dir)D.face=dir;const x0=D.x;D.x=clamp(D.x+dir*(run?RD.vr:RD.vw)*(g.dash>0?1.5:1)*dt,20,L.vw-20);if(D.y<0||D.vy<0){D.vy+=900*dt;D.y+=D.vy*dt;if(D.y>=0){D.y=0;D.vy=0}}D.o.ov={t:'blanket'};stepGait(D.o,D.x-x0,dt,RD,D.y>=0);
   for(const c of g.cats){const wx=(L.ox+c.px*L.S)/k,wy=(L.oy+c.py*L.S-L.gY)/k;
    if(c.st==='warn'){c.tm-=dt;c.x=wx+Math.sin(g.t*40)*1.5;c.y=wy;if(c.tm<=0){c.st='fall';c.vy=-60;c.x=wx}}
    else if(c.st==='fall'){c.vy+=620*dt;c.y+=c.vy*dt;const bx=D.x+14*D.face;
