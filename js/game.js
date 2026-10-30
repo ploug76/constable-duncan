@@ -742,7 +742,7 @@ function CatGame(cfg){
   let dir=0,run=false;const h=held();
   const fc=g.cats.filter(c=>c.st==='fall'||c.st==='warn').sort((a,b)=>(b.st==='fall')-(a.st==='fall')||a.tm-b.tm)[0];
   if(G.auto&&fc){const tx=(L.ox+fc.px*L.S)/k;dir=Math.abs(tx-D.x)>6?Math.sign(tx-D.x):0;run=Math.abs(tx-D.x)>40}
-  else if(h){const dx=h.x/k-D.x;if(Math.abs(dx)>6){dir=Math.sign(dx);run=Math.abs(dx*k)>G.W*0.2}}else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld()||true}}
+  else if(h){const dx=h.x/k-D.x;if(Math.abs(dx)>6){dir=Math.sign(dx);run=Math.abs(dx*k)>G.W*0.2}}else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld(dir)}}
   if(g.dash>0){g.dash-=dt;dir=D.face;run=true}if(g.dcd>0)g.dcd-=dt;if(dir)D.face=dir;const x0=D.x;D.x=clamp(D.x+dir*(run?RD.vr:RD.vw)*(g.dash>0?1.5:1)*dt,20,L.vw-20);if(D.y<0||D.vy<0){D.vy+=900*dt;D.y+=D.vy*dt;if(D.y>=0){D.y=0;D.vy=0}}D.o.ov={t:'blanket'};stepGait(D.o,D.x-x0,dt,RD,D.y>=0);
   for(const c of g.cats){const wx=(L.ox+c.px*L.S)/k,wy=(L.oy+c.py*L.S-L.gY)/k;
    if(c.st==='warn'){c.tm-=dt;c.x=wx+Math.sin(g.t*40)*1.5;c.y=wy;if(c.tm<=0){c.st='fall';c.vy=-60;c.x=wx}}
