@@ -1,4 +1,4 @@
-/* Constable Duncan of Flemingsburg - a Book of Heaven game (Oct 2026).
+/* Constable Duncan of Flemingsburg (Oct 2026).
    One canvas, DOM menus. Touch, keyboard and gamepad (no on-screen D-pad). All art drawn in code except the painted backgrounds. */
 'use strict';
 const $=i=>document.getElementById(i);
@@ -7,9 +7,11 @@ const cv=$('cv'),cx=cv.getContext('2d');
 const G={W:0,H:0,dpr:1,land:false,mode:'loading',lv:0,game:null,keys:{},pad:{ax:0,ay:0,btn:{},prev:{}},ptr:new Map(),paused:false,t:0,img:{},auto:false,
  stars:(()=>{try{return JSON.parse(localStorage.getItem('cd_stars')||'{}')}catch(e){return{}}})()};
 function saveStars(){try{localStorage.setItem('cd_stars',JSON.stringify(G.stars))}catch(e){}}
-function resize(){G.dpr=Math.min(2,devicePixelRatio||1);G.W=innerWidth;G.H=innerHeight;G.land=G.W>G.H;cv.width=Math.round(G.W*G.dpr);cv.height=Math.round(G.H*G.dpr);
+function resize(){G.dpr=Math.min(2,devicePixelRatio||1);G.W=innerWidth;G.FH=innerHeight;G.land=G.W>G.FH;
+ /* portrait play: game on top (62%), control panel below it (same split as Hair Mob) */
+ G.H=(!G.land&&typeof padOn==='function'&&padOn())?Math.round(G.FH*0.62):G.FH;cv.style.height=G.H+'px';cv.width=Math.round(G.W*G.dpr);cv.height=Math.round(G.H*G.dpr);if(typeof layoutPad==='function')layoutPad();
  document.body.classList.toggle('land',G.land);document.body.classList.toggle('port',!G.land);if(G.game&&G.game.resize)G.game.resize()}
-addEventListener('resize',resize);resize();
+addEventListener('resize',resize);addEventListener('orientationchange',()=>setTimeout(resize,120));resize();
 /* ---------------- sound (WebAudio, all synthesized) ---------------- */
 const Sound=(()=>{let ac=null,master=null,mus=null,on=true,musOn=false,nextT=0,step=0,timer=null,hiss=null,sirenN=null;
  try{on=localStorage.getItem('cd_sound')!=='0'}catch(e){}
@@ -258,26 +260,61 @@ function drawTiledBG(img,gy,groundY,bgH,camPx,dim){const s=bgH/img.height,w=img.
  const i0=Math.floor(camPx/w);for(let i=i0;i*w-camPx<G.W;i++){const x=i*w-camPx;if(i%2===0)cx.drawImage(img,x,top,w+0.5,bgH);else{cx.save();cx.translate(x+w,top);cx.scale(-1,1);cx.drawImage(img,-0.5,0,w+0.5,bgH);cx.restore()}}
  const bot=top+bgH;if(bot<G.H)for(let i=i0;i*w-camPx<G.W;i++){const x=i*w-camPx;cx.drawImage(img,0,img.height-2,img.width,2,x,bot-1,w+0.5,G.H-bot+1)}
  if(dim){cx.fillStyle=dim;cx.fillRect(0,0,G.W,G.H)}}
-/* ---------------- input ---------------- */
-function P(e){return{x:e.clientX,y:e.clientY,id:e.pointerId,t:performance.now()}}
-cv.addEventListener('pointerdown',e=>{Sound.unlock();const p=P(e);p.sx=p.x;p.sy=p.y;p.st=p.t;G.ptr.set(e.pointerId,p);if(G.mode==='play'&&!G.paused&&G.game&&G.game.down)G.game.down(p);e.preventDefault()},{passive:false});
-cv.addEventListener('pointermove',e=>{const p=G.ptr.get(e.pointerId);if(!p)return;p.x=e.clientX;p.y=e.clientY;if(G.mode==='play'&&!G.paused&&G.game&&G.game.move)G.game.move(p)});
-function pup(e){const p=G.ptr.get(e.pointerId);if(!p)return;G.ptr.delete(e.pointerId);p.x=e.clientX;p.y=e.clientY;const dt=performance.now()-p.st,dx=p.x-p.sx,dy=p.y-p.sy;
- p.tap=dt<280&&Math.hypot(dx,dy)<24;p.swipe=dt<450&&Math.hypot(dx,dy)>45?(Math.abs(dy)>Math.abs(dx)?(dy<0?'up':'down'):(dx<0?'left':'right')):null;
- if(G.mode==='play'&&!G.paused&&G.game&&G.game.up)G.game.up(p)}
-cv.addEventListener('pointerup',pup);cv.addEventListener('pointercancel',pup);
-function held(){for(const p of G.ptr.values()){if(performance.now()-p.st>150||Math.hypot(p.x-p.sx,p.y-p.sy)>24)return p}return null}
+/* ---------------- input ----------------
+   Same touch scheme as Peter's Vol 2 games (Jimothy Timothy and the Hair Mob, Kelly's Giraffe Getaway Vol 2):
+   SWIPE & HOLD anywhere to move (8-way, anchor follows the finger), SWIPE UP to jump, big round JUMP + ACTION buttons
+   bottom-right. Portrait: the game sits on top and the buttons live in their own panel below it, so they never cover play.
+   NO D-pad. */
+const TOUCH=new Map(),VIRT={jump:0,act:0};
+function swipeDir(t){const dx=t.x-t.ax,dy=t.y-t.ay,d=Math.hypot(dx,dy),o={};if(d<14)return o;if(d>44){t.ax=t.x-dx/d*44;t.ay=t.y-dy/d*44}
+ const s=Math.round(Math.atan2(dy,dx)/(Math.PI/4));if(s===0||s===1||s===-1)o.R=1;if(s===4||s===-4||s===3||s===-3)o.L=1;if(s===2||s===1||s===3)o.D=1;if(s===-2||s===-1||s===-3)o.U=1;return o}
+function playing(){return G.mode==='play'&&!G.paused&&G.game}
+function isUI(el){return el&&el.closest&&el.closest('button,.screen:not([hidden]),#storyBox')}
+document.addEventListener('pointerdown',e=>{Sound.unlock();if(!playing()||isUI(e.target))return;const t={x:e.clientX,y:e.clientY,ax:e.clientX,ay:e.clientY,ox:e.clientX,oy:e.clientY,px:e.clientX,py:e.clientY,z:{},st:performance.now()};TOUCH.set(e.pointerId,t);
+ if(G.game.touch)G.game.touch(t);e.preventDefault()},{passive:false});
+addEventListener('pointermove',e=>{const t=TOUCH.get(e.pointerId);if(!t)return;t.x=e.clientX;t.y=e.clientY;const ddx=t.x-t.px,ddy=t.y-t.py;t.px=t.x;t.py=t.y;
+ const bu=t.z.U;t.z=swipeDir(t);if(!playing())return;const g=G.game;if(g.drag)g.drag(ddx,ddy);if(t.z.U&&!bu&&g.jump&&g.swipeJump!==false)g.jump()},{passive:false});
+function pup(e){TOUCH.delete(e.pointerId)}
+addEventListener('pointerup',pup);addEventListener('pointercancel',pup);
+function clearInput(){TOUCH.clear();VIRT.jump=VIRT.act=0;G.keys={};document.querySelectorAll('#pad .big.on').forEach(b=>b.classList.remove('on'))}
+function held(){return null}
+function bindBtn(el,k){const on=e=>{e.preventDefault();e.stopPropagation();Sound.unlock();if(!playing())return;if(!VIRT[k]){const g=G.game;if(k==='jump'&&g.jump)g.jump();if(k==='act'&&g.act)g.act()}VIRT[k]=1;el.classList.add('on')},
+ off=e=>{e.preventDefault();VIRT[k]=0;el.classList.remove('on')};
+ el.addEventListener('pointerdown',on,{passive:false});el.addEventListener('pointerup',off,{passive:false});el.addEventListener('pointercancel',off);el.addEventListener('pointerleave',off);el.addEventListener('contextmenu',e=>e.preventDefault())}
+bindBtn($('bJump'),'jump');bindBtn($('bAct'),'act');
+function touchX(){let v=0;for(const t of TOUCH.values()){if(t.z.L)v-=1;if(t.z.R)v+=1}return clamp(v,-1,1)}
+function touchY(){let v=0;for(const t of TOUCH.values()){if(t.z.U)v-=1;if(t.z.D)v+=1}return clamp(v,-1,1)}
+/* a long swipe (finger well away from where it went down) runs */
+function touchRun(){for(const t of TOUCH.values())if(Math.abs(t.x-t.ox)>80)return true;return false}
+function actHeld(){const k=G.keys;return !!(VIRT.act||k.Space||k.Enter||k.KeyJ||G.pad.btn.a)}
+/* pad layout: copied from Hair Mob's layoutPad (portrait panel = bottom 38%, ACTION outer-right, JUMP inside it and higher) */
+function padOn(){return G.mode==='play'||G.mode==='result'}
+function layoutPad(){const pad=$('pad'),ba=$('bAct'),bj=$('bJump'),hint=$('swipeHint'),SB=8;
+ if(!G.land){const top=G.H,ph=G.FH-top;pad.style.top=top+'px';pad.style.height=ph+'px';
+  const big=Math.round(clamp(ph*0.36,92,124)),sm=Math.round(big*0.84),bot=Math.round(clamp(ph*0.14,18,46))+SB;
+  Object.assign(ba.style,{width:big+'px',height:big+'px',right:'16px',bottom:bot+'px'});
+  Object.assign(bj.style,{width:sm+'px',height:sm+'px',right:(16+big+14)+'px',bottom:(bot+big*0.42)+'px'});
+  if(bot+big*0.42+sm>ph-8)bj.style.bottom=(ph-sm-8)+'px';
+  hint.style.display='';Object.assign(hint.style,{top:'12px',left:'14px',right:'14px'})}
+ else{pad.style.top='0';pad.style.height=G.H+'px';const big=Math.round(clamp(G.H*0.21,72,96)),sm=Math.round(big*0.82);
+  Object.assign(ba.style,{width:big+'px',height:big+'px',right:'14px',bottom:'12px'});
+  Object.assign(bj.style,{width:sm+'px',height:sm+'px',right:(14+big+10)+'px',bottom:(12+big*0.18)+'px'});
+  hint.style.display='none'}}
+let padLbl='';
+function padSync(){const pad=$('pad'),vis=G.mode==='play'&&!G.paused&&!!G.game;if(pad.hidden===vis)pad.hidden=!vis;document.body.classList.toggle('padmode',padOn()&&!G.land);
+ if(!vis||!G.game)return;const g=G.game,b=(g.btns&&g.btns())||['JUMP','ACTION'],key=b.join('|');if(key===padLbl)return;padLbl=key;
+ const bj=$('bJump'),ba=$('bAct');bj.textContent=b[0]||'JUMP';bj.classList.toggle('dim',!b[0]);ba.textContent=b[1]||'ACTION';ba.classList.toggle('dim',!b[1]);$('swipeHint').innerHTML=(g.hint&&g.hint())||'SWIPE &amp; HOLD ANYWHERE TO MOVE<br>SWIPE UP TO JUMP'}
 addEventListener('keydown',e=>{Sound.unlock();const was=G.keys[e.code];G.keys[e.code]=true;if(was)return;
  if(G.mode==='play'){if(e.code==='Escape'||e.code==='KeyP'){togglePause();return}if(G.paused)return;const g=G.game;if(!g)return;
   if((e.code==='Space'||e.code==='Enter'||e.code==='KeyJ')&&g.act){g.act();e.preventDefault()}
-  if((e.code==='ArrowUp'||e.code==='KeyW'||e.code==='KeyK')&&g.jump){g.jump();e.preventDefault()}
+  if((e.code==='KeyK'||((e.code==='ArrowUp'||e.code==='KeyW')&&g.swipeJump!==false))&&g.jump){g.jump();e.preventDefault()}
   if(/^Arrow/.test(e.code))e.preventDefault()}
  else if(G.mode==='story'&&(e.code==='Space'||e.code==='Enter'||e.code==='ArrowRight')){$('bNext').click();e.preventDefault()}
  else if(G.mode==='story'&&e.code==='Escape'){$('bSkip').click()}});
-addEventListener('keyup',e=>{G.keys[e.code]=false});addEventListener('blur',()=>{G.keys={}});
-function axisX(){const k=G.keys;return clamp(((k.ArrowRight||k.KeyD)?1:0)-((k.ArrowLeft||k.KeyA)?1:0)+G.pad.ax,-1,1)}
-function axisY(){const k=G.keys;return clamp(((k.ArrowDown||k.KeyS)?1:0)-((k.ArrowUp||k.KeyW)?1:0)+G.pad.ay,-1,1)}
-function runHeld(){return !!(G.keys.ShiftLeft||G.keys.ShiftRight||Math.abs(G.pad.ax)>0.85||G.pad.btn.x||G.pad.btn.rb)}
+addEventListener('keyup',e=>{G.keys[e.code]=false});addEventListener('blur',clearInput);document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(G.mode==='play'&&!G.paused)togglePause()}});
+function axisX(){const k=G.keys;return clamp(((k.ArrowRight||k.KeyD)?1:0)-((k.ArrowLeft||k.KeyA)?1:0)+G.pad.ax+touchX(),-1,1)}
+function axisY(){const k=G.keys;return clamp(((k.ArrowDown||k.KeyS)?1:0)-((k.ArrowUp||k.KeyW)?1:0)+G.pad.ay+touchY(),-1,1)}
+function runHeld(){return !!(touchRun()||G.keys.ShiftLeft||G.keys.ShiftRight||Math.abs(G.pad.ax)>0.85||G.pad.btn.x||G.pad.btn.rb)}
 function pollPad(){const ps=navigator.getGamepads?navigator.getGamepads():[];let gp=null;for(const p of ps)if(p&&p.connected){gp=p;break}
  const pd=G.pad;pd.prev=pd.btn;pd.btn={};pd.ax=pd.ay=0;if(!gp)return;const b=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed),dz=v=>Math.abs(v)<0.22?0:v;
  pd.ax=clamp(dz(gp.axes[0]||0)+(b(15)?1:0)-(b(14)?1:0),-1,1);pd.ay=clamp(dz(gp.axes[1]||0)+(b(13)?1:0)-(b(12)?1:0),-1,1);
@@ -292,7 +329,7 @@ function menuNav(E){const bs=[...document.querySelectorAll('#ui button')].filter
 /* ---------------- screens ---------------- */
 const SCREENS=['loading','title','levels','story','howto','pause','result'];
 function show(id){for(const s of SCREENS)$(s).hidden=s!==id;$('hud').hidden=!(id==='pause'||G.mode==='play');const f=$(id)&&$(id).querySelector('button.big,button');if(f&&!('ontouchstart' in window))setTimeout(()=>f.focus(),30)}
-function setMode(m,scr){G.mode=m;show(scr||m)}
+function setMode(m,scr){const was=padOn();G.mode=m;if(was!==padOn())resize();show(scr||m)}
 function goTitle(){G.game=null;G.paused=false;setMode('title');Sound.startMusic()}
 function goLevels(){const L=$('lvList');L.innerHTML='';LV.forEach((l,i)=>{const b=document.createElement('button');const st=G.stars[l.id]||0;
   b.innerHTML=`${i+1}. ${l.name}<small>${l.kind}</small><span class="st">${'★'.repeat(st)}${'☆'.repeat(3-st)}</span>`;b.onclick=()=>{Sound.play('click');startLevel(i)};L.appendChild(b)});setMode('levels')}
@@ -305,9 +342,9 @@ $('bSkip').onclick=()=>{Sound.play('click');if(!story)return;const d=story.done;
 function startLevel(i){G.lv=i;G.paused=false;const L=LV[i];G.game=L.make(L.cfg||{});G.game.lvl=L;startStory(L.story,()=>howto(i),true)}
 function howto(i){const L=LV[i];$('htNum').textContent='Level '+(i+1)+' of '+LV.length+' · '+L.kind;$('htTitle').textContent=L.name;$('htText').textContent=L.how;
  $('htKeys').innerHTML=L.keys.map(k=>'<div>'+k+'</div>').join('');setMode('howto')}
-$('bStart').onclick=()=>{Sound.play('click');Sound.unlock();G.paused=false;G.mode='play';show('none');$('hud').hidden=false;$('hudLv').textContent='Lv '+(G.lv+1);if(G.game.start)G.game.start()};
+$('bStart').onclick=()=>{Sound.play('click');Sound.unlock();G.paused=false;clearInput();const was=padOn();G.mode='play';if(!was)resize();show('none');$('hud').hidden=false;$('hudLv').textContent='Lv '+(G.lv+1);if(G.game.start)G.game.start()};
 $('bPause').onclick=()=>togglePause();
-function togglePause(){if(G.mode!=='play')return;G.paused=!G.paused;$('pause').hidden=!G.paused;if(G.paused){$('bPSound').textContent='Sound: '+(Sound.isOn()?'On':'Off');Sound.setHiss(0)}}
+function togglePause(){if(G.mode!=='play')return;G.paused=!G.paused;$('pause').hidden=!G.paused;clearInput();if(G.paused){$('bPSound').textContent='Sound: '+(Sound.isOn()?'On':'Off');Sound.setHiss(0)}}
 $('bResume').onclick=()=>togglePause();
 $('bRestart').onclick=()=>{$('pause').hidden=true;G.paused=false;const L=LV[G.lv];G.game=L.make(L.cfg||{});G.game.lvl=L;$('bStart').onclick()};
 $('bSkipLv').onclick=()=>{$('pause').hidden=true;G.paused=false;Sound.setHiss(0);nextLevel()};
@@ -342,7 +379,7 @@ function SideGame(cfg){
   if(s.t==='boss'){e.hits=0;e.st='intro';e.tm=1.2}
   g.ents.push(e)}
  g.boss=g.ents.find(e=>e.type==='boss');
- g.view=()=>{const land=G.land;const k=land?G.H*0.235/106:Math.min(G.H*0.165,G.W*0.37)/106;const gY=land?G.H*0.86:G.H*0.80;const bgH=land?G.H*1.03:G.H*0.82;return{k,gY,bgH,vw:G.W/k}};
+ g.view=()=>{const land=G.land;const k=land?G.H*0.235/106:Math.min(G.H*0.2,G.W*0.4)/106;const gY=land?G.H*0.86:G.H*0.85;const bgH=land?G.H*1.03:G.H*0.93;return{k,gY,bgH,vw:G.W/k}};
  g.start=()=>{g.started=true;if(g.boss)toast('BOSS: The Great Umbrella!',1800);else if(cfg.toast)toast(cfg.toast,1500)};
  function hurt(dir){if(D.inv>0||g.over)return;g.hearts--;D.inv=1.4;D.kb=dir*230;D.vy=-120;D.y=-1;Sound.play('hurt');fxText(g.F,D.x,D.y-120,'Ouch!','#ff8a7a',15);if(g.hearts<=0){g.over=true;setTimeout(()=>finish(false,0,cfg.failText||'The troublemakers got the best of you this time. Try again!'),600)}}
  function bust(e){e.st='busted';e.tm=1.1;e.cuffed=true;g.busted++;Sound.play('cuff');setTimeout(()=>Sound.play('bust'),120);D.ov={t:'cuff',tm:0.35};fxBurst(g.F,e.x,-60,14,'star',140,0.8,4,150);
@@ -365,7 +402,7 @@ function SideGame(cfg){
  g.jump=()=>{if(g.over||!g.started)return;if(D.y>=-0.5){D.vy=-340;D.y=-1;Sound.play('jump')}};
  let hold=null,tapT=0;
  g.down=p=>{};g.move=p=>{};
- g.up=p=>{if(p.swipe==='up'){g.jump();return}if(p.tap)g.act()};
+ g.up=p=>{};g.btns=()=>['JUMP','ACTION'];
  g.update=dt=>{g.t+=dt;const V=g.view();if(g.flash>0)g.flash-=dt;
   /* --- Duncan input --- */
   let dir=0,run=false;const h=held();
@@ -523,7 +560,9 @@ function DriveGame(cfg){
    g.spawnD+=rnd(cfg.gap?cfg.gap[0]:150,cfg.gap?cfg.gap[1]:260)}}
  g.act=()=>{if(!g.started||g.over)return;if(g.siren>0){return}g.siren=2.2;Sound.play('siren');fxText(g.F,J.a,-J.d-60,'WEE-OOO!','#9ad8ff',14);
   for(const c of g.cars){if(c.st==='drive'&&c.d>J.d-40&&c.d<J.d+360){c.st='yield';c.ta=c.a>=0?112:-112;if(Math.abs(c.a)<20)c.ta=J.a>c.a?-112:112}else if(c.st==='stub'&&c.d>J.d-40&&c.d<J.d+360){fxText(g.F,c.a,-c.d-30,'Nyet!','#ff8a7a',12)}}};
- g.down=()=>{};g.move=()=>{};g.up=p=>{if(p.tap)g.act()};
+ g.down=()=>{};g.move=()=>{};g.up=p=>{};g.swipeJump=false;g.boost=0;g.bcd=0;
+ g.jump=()=>{if(!g.started||g.over||g.bcd>0)return;g.boost=1;g.bcd=2.4;Sound.play('jump');fxText(g.F,J.a,-J.d-60,'BOOST!','#ffd23f',14)};
+ g.btns=()=>[g.bcd>0?'':'BOOST','SIREN'];g.hint=()=>'SWIPE &amp; HOLD ANYWHERE TO STEER<br>BOOST TO RAM · SIREN TO CLEAR';
  g.update=dt=>{g.t+=dt;if(!g.started)return;spawn();const k=g.k();if(g.siren>0)g.siren-=dt;
   /* steering */
   let ta=null;const h=held();
@@ -531,7 +570,7 @@ function DriveGame(cfg){
   else if(h){ta=G.land?(h.y-G.H/2)/k:(h.x-G.W/2)/k}
   let st=0;if(ta!==null){const d=ta-J.a;st=Math.abs(d)>3?Math.sign(d)*Math.min(1,Math.abs(d)/30):0}else st=G.land?axisY():axisX();
   J.a=clamp(J.a+st*230*dt,-125,125);J.rot=st*0.15;
-  if(J.slow>0)J.slow-=dt;const vt=(cfg.speed||260)*(J.slow>0?0.75:1)*(Math.abs(J.a)>95?0.85:1);J.v+=(vt-J.v)*Math.min(1,dt*2);J.d+=J.v*dt;
+  if(g.boost>0)g.boost-=dt;if(g.bcd>0)g.bcd-=dt;if(J.slow>0)J.slow-=dt;const vt=(cfg.speed||260)*(g.boost>0?1.4:1)*(J.slow>0?0.75:1)*(Math.abs(J.a)>95?0.85:1);J.v+=(vt-J.v)*Math.min(1,dt*2);J.d+=J.v*dt;
   /* cars */
   for(const c of g.cars){if(c.st==='off'){c.va*=Math.pow(0.05,dt);c.a+=c.va*dt;c.rot+=c.spin*dt;c.spin*=Math.pow(0.1,dt);c.v*=Math.pow(0.1,dt);c.d+=c.v*dt;continue}
    if(c.st==='yield'){c.a+=clamp(c.ta-c.a,-90*dt,90*dt);c.v+=(70-c.v)*dt;if(Math.abs(c.a-c.ta)<2&&!c.ok){c.ok=1;fxText(g.F,c.a,-c.d-30,'👍','#fff',12)}}
@@ -610,22 +649,25 @@ function FireGame(cfg){
  const g={F:[],t:0,phase:'hose',task:0,hold:true,done:0,goal:cfg.goal||12,spreads:0,ret:{x:0,y:0},retOn:false,started:false,smoke:[],
   W:WIN.map((r,i)=>({r,f:0,full:0,id:i})),ig:2,d:{x:0,y:0,face:1,o:mkGait(),ov:{t:'hose'}},crew:[{o:mkGait()},{o:mkGait()}],ars:{x:0,o:mkGait(),on:false}};
  const D=g.d;
- g.L=()=>{const land=G.land;let S,ox,oy,gY,k;if(land){S=G.W/1280;ox=0;oy=-40*S;gY=G.H*0.97;k=G.H*0.2/106}else{S=G.W/920;ox=-180*S;oy=Math.max(54,G.H*0.07);gY=G.H*0.87;k=G.H*0.12/106}return{S,ox,oy,gY,k,vw:G.W/k}};
+ g.L=()=>{const land=G.land;let S,ox,oy,gY,k;if(land){S=G.W/1280;ox=0;oy=-40*S;gY=G.H*0.97;k=G.H*0.2/106}else{S=G.W/920;ox=-180*S;oy=Math.max(54,G.H*0.07);gY=G.H*0.87;k=G.H*0.155/106}return{S,ox,oy,gY,k,vw:G.W/k}};
  const L0=g.L();D.x=170;
  g.tasks=()=>{const L=g.L();return[{x:L.vw-34,label:'Hook the hose to the hydrant!'},{x:L.vw*(G.land?0.5:0.46),label:'Bring a hose to the fire crew!'}]};
  g.start=()=>{g.started=true;toast('Run the hose!',1300)};
  g.act=()=>{if(!g.started||g.over)return;if(g.phase==='hose'){const T=g.tasks()[g.task];if(g.hold&&Math.abs(D.x-T.x)<40){g.hold=false;Sound.play('cuff');fxText(g.F,T.x,-120,g.task===0?'Hooked up!':'Here ya go!','#9effa0',15);g.task++;
     if(g.task>=2){g.phase='spray';g.W[1].f=0.5;g.W[3].f=0.45;g.ars.on=true;g.ars.x=g.L().vw*0.3;toast('Aim the water at the fire!',1500)}}}};
- g.down=p=>{};g.move=p=>{};g.up=p=>{if(p.tap&&g.phase==='hose')g.act()};
+ g.down=p=>{};g.move=p=>{};g.up=p=>{};D.vy=0;
+ g.jump=()=>{if(!g.started||g.over||g.phase!=='hose')return;if(D.y>=-0.5){D.vy=-320;D.y=-1;Sound.play('jump')}};
+ g.btns=()=>g.phase==='hose'?['JUMP',g.hold?'HOOK UP':'ACTION']:['','SPRAY'];g.hint=()=>g.phase==='hose'?'SWIPE &amp; HOLD ANYWHERE TO MOVE<br>SWIPE UP TO JUMP':'SWIPE &amp; HOLD TO AIM THE WATER<br>HOLD SPRAY TO SPRAY';
+ g.swipeJump=true;g.drag=(dx,dy)=>{if(g.phase!=='spray')return;const gn=1.5;g.ret.x=clamp(g.ret.x+dx*gn,0,G.W);g.ret.y=clamp(g.ret.y+dy*gn,0,G.H);g.retOn=true};
  g.update=dt=>{g.t+=dt;if(!g.started)return;const L=g.L(),k=L.k;
   if(g.phase==='hose'){const T=g.tasks()[g.task];let dir=0,run=false;const h=held();
    if(G.auto){const tx=g.hold?T.x:150;dir=Math.abs(tx-D.x)>12?Math.sign(tx-D.x):0;run=true;if(!dir&&g.hold)g.act()}
    else if(h){const dx=h.x/k-D.x;if(Math.abs(dx)>8){dir=Math.sign(dx);run=Math.abs(dx*k)>G.W*0.22}}else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld()}}
-   if(dir)D.face=dir;const x0=D.x;D.x=clamp(D.x+dir*(run?RD.vr:RD.vw)*dt,20,L.vw-20);stepGait(D.o,D.x-x0,dt,RD,true);D.ov=g.hold?{t:'hose'}:null;D.o.ov=D.ov;
+   if(dir)D.face=dir;const x0=D.x;D.x=clamp(D.x+dir*(run?RD.vr:RD.vw)*dt,20,L.vw-20);if(D.y<0||D.vy<0){D.vy+=900*dt;D.y+=D.vy*dt;if(D.y>=0){D.y=0;D.vy=0}}stepGait(D.o,D.x-x0,dt,RD,D.y>=0);D.ov=g.hold?{t:'hose'}:null;D.o.ov=D.ov;
    if(!g.hold&&D.x<175){g.hold=true;Sound.play('click');fxText(g.F,D.x,-120,'Got a hose!','#fff',13)}}
   else{/* spray */
    const h=held();if(G.auto){if(!g._tw||g._tw.f<=0)g._tw=g.W.filter(w=>w.f>0).sort((a,b)=>b.f-a.f)[0];const w=g._tw;if(w){const tx=L.ox+(w.r[0]+w.r[2])/2*L.S,ty=L.oy+(w.r[1]+w.r[3])/2*L.S;g.ret.x+=(tx-g.ret.x)*Math.min(1,dt*6);g.ret.y+=(ty-g.ret.y)*Math.min(1,dt*6)}g.retOn=true}
-   else if(h){g.ret.x=h.x;g.ret.y=h.y;g.retOn=true}else{const ax=axisX(),ay=axisY();if(ax||ay){g.ret.x=clamp(g.ret.x+ax*520*dt,0,G.W);g.ret.y=clamp(g.ret.y+ay*520*dt,0,G.H);g.retOn=true}else if(!G.ptr.size&&!g.padAim)g.retOn=g.retOn&&!('ontouchstart' in window)}
+   else{g.swipeJump=false;const k=G.keys,ax=clamp(((k.ArrowRight||k.KeyD)?1:0)-((k.ArrowLeft||k.KeyA)?1:0)+G.pad.ax,-1,1),ay=clamp(((k.ArrowDown||k.KeyS)?1:0)-((k.ArrowUp||k.KeyW)?1:0)+G.pad.ay,-1,1);if(ax||ay){g.ret.x=clamp(g.ret.x+ax*520*dt,0,G.W);g.ret.y=clamp(g.ret.y+ay*520*dt,0,G.H)}g.retOn=!!(ax||ay||actHeld()||TOUCH.size)}
    if(!g.ret.x&&!g.ret.y){g.ret.x=G.W/2;g.ret.y=G.H*0.3}
    Sound.setHiss(g.retOn?1:0);
    if(g.retOn){for(const w of g.W){if(w.f<=0)continue;const r=w.r,x0=L.ox+r[0]*L.S-14,x1=L.ox+r[2]*L.S+14,y0=L.oy+r[1]*L.S-14,y1=L.oy+r[3]*L.S+14;
@@ -664,7 +706,7 @@ function FireGame(cfg){
    drawPerson(cx,g.crew[i].o,LOOK.fire);cx.restore()}
   if(g.task>=2){cx.strokeStyle='#e8d8a0';cx.lineWidth=3;cx.beginPath();cx.moveTo(cr-30,-2);cx.quadraticCurveTo(cr-20,-40,cr-8+(g.crew[0].o._hand?g.crew[0].o._hand[0]:10),g.crew[0].o._hand?g.crew[0].o._hand[1]:-60);cx.stroke()}
   if(g.ars.on){cx.save();cx.translate(g.ars.x,0);drawPerson(cx,g.ars.o,LOOK.arsonist);cx.restore()}
-  cx.save();cx.translate(D.x,0);cx.scale(D.face,1);drawDuncan(cx,D.o);cx.restore();
+  cx.save();cx.translate(D.x,D.y||0);cx.scale(D.face,1);drawDuncan(cx,D.o);cx.restore();
   fxDraw(cx,g.F,1);cx.restore();
   /* water stream */
   if(g.phase==='spray'&&g.retOn){const h=g.crew[0].o._hand||[10,-60];const nx=(cr-8+h[0])*k,ny=L.gY+h[1]*k,tx=g.ret.x,ty=g.ret.y,mx=(nx+tx)/2,my=Math.min(ny,ty)-Math.abs(tx-nx)*0.25-40;
@@ -684,10 +726,13 @@ function drawCat(c,col,pose,t){c.save();const fall=pose==='fall';c.fillStyle=col
  c.fillStyle='#2a1a10';c.beginPath();c.arc(12,-16,1.1,0,TAU);c.arc(9,-16,1.1,0,TAU);c.fill();if(fall){c.beginPath();c.arc(11,-12,1.6,0,TAU);c.fill()}c.restore()}
 function CatGame(cfg){
  const g={F:[],t:0,caught:0,miss:0,goal:cfg.goal||10,cats:[],next:1.2,launched:0,started:false,d:{x:0,face:1,o:mkGait(),ov:{t:'blanket'}},basket:[]};const D=g.d;
- g.L=()=>{const land=G.land;let S,ox,oy,gY,k;if(land){S=G.W/1280;gY=G.H*0.985;oy=gY-619*S;ox=0;k=G.H*0.2/106}else{S=G.H/720;oy=0;gY=619*S;ox=G.W/2-700*S;k=G.H*0.13/106}return{S,ox,oy,gY,k,vw:G.W/k}};
+ g.L=()=>{const land=G.land;let S,ox,oy,gY,k;if(land){S=G.W/1280;gY=G.H*0.985;oy=gY-619*S;ox=0;k=G.H*0.2/106}else{S=G.H/720;oy=0;gY=619*S;ox=G.W/2-700*S;k=G.H*0.165/106}return{S,ox,oy,gY,k,vw:G.W/k}};
  D.x=g.L().vw*0.5;
  g.start=()=>{g.started=true;toast('Catch the kitties!',1300)};
- g.act=()=>{};g.down=()=>{};g.move=()=>{};g.up=()=>{};
+ D.y=0;D.vy=0;g.dash=0;g.dcd=0;
+ g.act=()=>{if(!g.started||g.over||g.dcd>0)return;g.dash=0.35;g.dcd=0.8;Sound.play('jump');fxBurst(g.F,D.x-D.face*20,-10,6,['#fff','#ddd'],80,0.4,3,0)};
+ g.jump=()=>{if(!g.started||g.over)return;if(D.y>=-0.5){D.vy=-300;D.y=-1;Sound.play('jump')}};
+ g.down=()=>{};g.move=()=>{};g.up=()=>{};g.btns=()=>['JUMP','DIVE'];g.hint=()=>'SWIPE &amp; HOLD ANYWHERE TO MOVE<br>DIVE FOR A FAST DASH';
  const COLS=['#e8962a','#2a2a2a','#f0f0f0','#9a9aa8','#d8b07a'];
  g.update=dt=>{g.t+=dt;if(!g.started)return;const L=g.L(),k=L.k;
   g.next-=dt;if(g.next<=0&&g.launched<g.goal+2&&g.cats.filter(c=>c.st!=='done').length<2){g.next=Math.max(1.3,2.6-g.launched*0.1);const p=pick(PERCH);g.cats.push({px:p[0],py:p[1],st:'warn',tm:1.3,col:pick(COLS),x:0,y:0,vy:0});g.launched++;Sound.play('meow')}
@@ -695,11 +740,11 @@ function CatGame(cfg){
   const fc=g.cats.filter(c=>c.st==='fall'||c.st==='warn').sort((a,b)=>(b.st==='fall')-(a.st==='fall')||a.tm-b.tm)[0];
   if(G.auto&&fc){const tx=(L.ox+fc.px*L.S)/k;dir=Math.abs(tx-D.x)>6?Math.sign(tx-D.x):0;run=Math.abs(tx-D.x)>40}
   else if(h){const dx=h.x/k-D.x;if(Math.abs(dx)>6){dir=Math.sign(dx);run=Math.abs(dx*k)>G.W*0.2}}else{const ax=axisX();if(Math.abs(ax)>0.2){dir=Math.sign(ax);run=runHeld()||true}}
-  if(dir)D.face=dir;const x0=D.x;D.x=clamp(D.x+dir*(run?RD.vr:RD.vw)*dt,20,L.vw-20);D.o.ov={t:'blanket'};stepGait(D.o,D.x-x0,dt,RD,true);
+  if(g.dash>0){g.dash-=dt;dir=D.face;run=true}if(g.dcd>0)g.dcd-=dt;if(dir)D.face=dir;const x0=D.x;D.x=clamp(D.x+dir*(run?RD.vr:RD.vw)*(g.dash>0?1.9:1)*dt,20,L.vw-20);if(D.y<0||D.vy<0){D.vy+=900*dt;D.y+=D.vy*dt;if(D.y>=0){D.y=0;D.vy=0}}D.o.ov={t:'blanket'};stepGait(D.o,D.x-x0,dt,RD,D.y>=0);
   for(const c of g.cats){const wx=(L.ox+c.px*L.S)/k,wy=(L.oy+c.py*L.S-L.gY)/k;
    if(c.st==='warn'){c.tm-=dt;c.x=wx+Math.sin(g.t*40)*1.5;c.y=wy;if(c.tm<=0){c.st='fall';c.vy=-60;c.x=wx}}
    else if(c.st==='fall'){c.vy+=620*dt;c.y+=c.vy*dt;const bx=D.x+14*D.face;
-    if(c.y>=-72&&c.y<-50&&Math.abs(c.x-bx)<34){c.st='done';g.caught++;Sound.play('help');fxBurst(g.F,c.x,-80,8,'heart',90,1,5,-40);fxText(g.F,c.x,-120,pick(['Gotcha, kitty!','Safe!','Purrfect!']),'#9effa0',14);g.basket.push(c.col);
+    if(c.y-D.y>=-72&&c.y-D.y<-50&&Math.abs(c.x-bx)<34){c.st='done';g.caught++;Sound.play('help');fxBurst(g.F,c.x,-80,8,'heart',90,1,5,-40);fxText(g.F,c.x,-120,pick(['Gotcha, kitty!','Safe!','Purrfect!']),'#9effa0',14);g.basket.push(c.col);
      if(g.caught>=g.goal&&!g.over){g.over=true;setTimeout(()=>finish(true,g.miss===0?3:g.miss===1?2:1,`You caught ${g.caught} kitties! Missed: ${g.miss}.`),700)}}
     else if(c.y>=0){c.st='done';g.miss++;Sound.play('meow');fxText(g.F,c.x,-60,'Missed!','#ff8a7a',14);c.run=1;
      if(g.miss>=3&&!g.over){g.over=true;setTimeout(()=>finish(false,0,'Three kitties got away! They are fine, but let us try again.'),700)}}}}
@@ -711,7 +756,7 @@ function CatGame(cfg){
   cx.save();cx.translate(30,0);cx.fillStyle='#a87a3a';cx.strokeStyle='#5a3a10';rr(cx,-22,-24,44,24,6);cx.fill();cx.stroke();g.basket.forEach((col,i)=>{cx.save();cx.translate(-14+(i%4)*9,-22-Math.floor(i/4)*6);cx.scale(0.5,0.5);drawCat(cx,col,'sit',g.t+i);cx.restore()});cx.restore();
   for(const c of g.cats){if(c.st==='fall'){cx.fillStyle='rgba(0,0,0,.25)';cx.beginPath();cx.ellipse(c.x,0,14,3,0,0,TAU);cx.fill()}
    cx.save();cx.translate(c.x,c.y);drawCat(cx,c.col,c.st==='fall'?'fall':'sit',g.t);if(c.st==='warn'){cx.fillStyle='#ffd23f';cx.font='18px Lilita,system-ui';cx.textAlign='center';cx.fillText('!',6,-34)}cx.restore()}
-  cx.save();cx.translate(D.x,0);cx.scale(D.face,1);drawDuncan(cx,D.o);const hd=D.o._hand||[14,-60];cx.fillStyle='#c8202a';cx.strokeStyle='#5a0a10';cx.lineWidth=1.2;cx.beginPath();cx.ellipse(14,hd[1]-2,26,6,0,0,TAU);cx.fill();cx.stroke();
+  cx.save();cx.translate(D.x,D.y);cx.scale(D.face,1);drawDuncan(cx,D.o);const hd=D.o._hand||[14,-60];cx.fillStyle='#c8202a';cx.strokeStyle='#5a0a10';cx.lineWidth=1.2;cx.beginPath();cx.ellipse(14,hd[1]-2,26,6,0,0,TAU);cx.fill();cx.stroke();
   cx.fillStyle='#fff';cx.fillRect(12,hd[1]-5,4,6);cx.restore();
   fxDraw(cx,g.F,1);cx.restore()};
  return g}
@@ -722,7 +767,7 @@ function TrafficGame(cfg){
  const DIRS={E:{vx:1,vy:0,ax:'EW',lane:[0,18]},W:{vx:-1,vy:0,ax:'EW',lane:[0,-18]},N:{vx:0,vy:-1,ax:'NS',lane:[18,0]},S:{vx:0,vy:1,ax:'NS',lane:[-18,0]}};
  g.start=()=>{g.started=true;toast('Wave the traffic through!',1400)};
  g.toggle=to=>{if(g.over)return;const n=to||(g.sig==='EW'?'NS':'EW');if(n===g.sig&&!g.sw)return;g.sig=n;g.sw=0.7;Sound.play('whistle')};
- g.act=()=>{if(g.started)g.toggle()};g.down=()=>{};g.move=()=>{};g.up=p=>{if(p.tap||p.swipe)g.act()};
+ g.act=()=>{if(g.started)g.toggle()};g.down=()=>{};g.move=()=>{};g.up=p=>{};g.swipeJump=false;g.btns=()=>['','SWITCH'];g.hint=()=>'SWIPE ← → OR ↑ ↓ TO PICK THE ROAD<br>OR TAP SWITCH';
  g.update=dt=>{g.t+=dt;if(!g.started)return;const k=g.k(),hx=G.W/2/k+40,hy=G.H/2/k+40;if(g.sw>0)g.sw-=dt;
   if(!G.auto){const ax=axisX(),ay=axisY();if(Math.abs(ax)>0.7&&Math.abs(ay)<0.3&&g.sig!=='EW')g.toggle('EW');if(Math.abs(ay)>0.7&&Math.abs(ax)<0.3&&g.sig!=='NS')g.toggle('NS')}
   g.spawnT-=dt;if(g.spawnT<=0){g.spawnT=Math.max(0.75,1.6-g.t*0.01);const d=pick(['E','W','N','S']);g.addCar(d,false)}
@@ -763,32 +808,32 @@ function ENDING(){const g={t:0,F:[],d:{o:mkGait()},crowd:[{o:mkGait(),L:LOOK.gra
   cx.save();g.d.o.ov={t:'cheer'};g.d.ov={t:'cheer'};drawDuncan(cx,g.d.o);cx.restore();cx.restore()};
  g.update2=g.update;return g}
 /* ================= LEVELS ================= */
-const KEYS_SIDE=['<b>Touch:</b> hold left or right of Duncan to walk, hold far away to run. Tap to bust or help. Swipe up to jump.','<b>Keys:</b> ← → walk, Shift run, Space bust/help, ↑ jump.','<b>Gamepad:</b> stick walk (push far to run), A bust/help, B jump.'];
-const KEYS_DRIVE=['<b>Touch:</b> hold your finger where you want the Jeep to go. Tap for the siren.','<b>Keys:</b> arrows steer, Space siren.','<b>Gamepad:</b> stick steers, A siren.'];
+const KEYS_SIDE=['<b>Touch:</b> swipe &amp; hold anywhere to walk (a long swipe runs). Swipe up or press JUMP to jump. ACTION busts or helps.','<b>Keys:</b> ← → walk, Shift run, Space bust/help, ↑ jump.','<b>Gamepad:</b> stick walk (push far to run), A bust/help, B jump.'];
+const KEYS_DRIVE=['<b>Touch:</b> swipe &amp; hold anywhere to steer. SIREN clears the road, BOOST rams.','<b>Keys:</b> arrows steer, Space siren, K boost.','<b>Gamepad:</b> stick steers, A siren, B boost.'];
 const LV=[
  {id:'l1',name:'Main Street Patrol',kind:'On foot',make:SideGame,cfg:{bg:'street_day',gy:0.87,len:2700,toast:'Patrol Main Street!',endSign:'Next Block →',
    spawns:[{t:'granny',x:330},{t:'umb',x:620},{t:'antifa',x:900},{t:'umb',x:1220},{t:'kid',x:1450,momdx:240},{t:'umb',x:1850},{t:'commie',x:2150},{t:'umb',x:2420}]},
   story:[['Duncan','Mornin\', Flemingsburg! Constable Duncan, reportin\' for duty. Kilt pressed, boots shined.'],['Duncan','Word is the umbrellas are creepin\' around town again. Tall, dark and sneaky.'],['Duncan','Get too close and they POP open on ya. Bust \'em before they pop, or wait till they\'re stuck open and dizzy!'],['Duncan','And keep an eye out for Antifa and commies. Let\'s go keep this town safe.']],
   how:'Walk down Main Street. Bust umbrellas, Antifa and commies, and help the neighbors who need you.',keys:KEYS_SIDE},
  {id:'l2',name:'Code 3: Clear the Road',kind:'Jeep driving',make:DriveGame,cfg:{escort:'fire',dist:9000,speed:260,stubborn:0.12,umbs:0.14,gap:[170,280]},
-  story:[['Dispatch','Constable! House fire out on Elm Street. The fire truck needs a clear road, NOW!'],['Duncan','Lights on, siren on. Time to put this ol\' Jeep to work.'],['Duncan','Tap the siren and folks pull over. The stubborn ones in the red cars won\'t budge, so ram \'em off the road!']],
+  story:[['Dispatch','Constable! House fire out on Elm Street. The fire truck needs a clear road, NOW!'],['Duncan','Lights on, siren on. Time to put this ol\' Jeep to work.'],['Duncan','Hit the SIREN and folks pull over. The stubborn ones in the red cars won\'t budge, so ram \'em off the road!']],
   how:'Drive ahead of the fire truck. Siren cars out of the way or ram them off the road so the truck never gets stuck.',keys:KEYS_DRIVE},
  {id:'l3',name:'Run the Hose',kind:'Fire rescue',make:FireGame,cfg:{goal:12},
   story:[['Fire Chief','Duncan! Glad you\'re here. We need hoses run and we need \'em quick!'],['Duncan','Hook the hose to the hydrant, then bring a line to the crew. Then we drown those flames!'],['Duncan','Hey... who\'s that sneakin\' around with a gas can?']],
-  how:'First run the hoses: carry one to the hydrant, then bring one to the crew. Then aim the water into the burning windows.',keys:['<b>Touch:</b> hold to walk Duncan with the hose, tap to hook it up. Then hold your finger on a fire to spray it.','<b>Keys:</b> ← → walk, Space hook up, then arrows aim the water.','<b>Gamepad:</b> stick walk, A hook up, then stick aims the water.']},
+  how:'First run the hoses: carry one to the hydrant, then bring one to the crew. Then aim the water into the burning windows.',keys:['<b>Touch:</b> swipe &amp; hold to walk Duncan with the hose, press HOOK UP at the hydrant and the crew. Then swipe &amp; hold to aim the water, hold SPRAY to spray.','<b>Keys:</b> ← → walk, Space hook up, then arrows aim and Space sprays.','<b>Gamepad:</b> stick walk, A hook up, then stick aims the water.']},
  {id:'l4',name:'Antifa Alley',kind:'On foot',make:SideGame,cfg:{bg:'street_dusk',gy:0.83,len:2900,hearts:3,toast:'Catch the firebug!',endSign:'Lock-up →',umbSp:44,umbWind:0.7,
    spawns:[{t:'antifa',x:420},{t:'umb',x:680},{t:'commie',x:900},{t:'farmer',x:1120},{t:'antifa',x:1380},{t:'umb',x:1600},{t:'commie',x:1850},{t:'umb',x:2080},{t:'granny',x:2250},{t:'arsonist',x:2560}]},
   story:[['Duncan','That firebug ran off toward the east side. Sun\'s goin\' down, and the troublemakers are out.'],['Duncan','Antifa run when they see me comin\'. Run after \'em! They get tired quick.'],['Duncan','Commies throw tomatoes. Jump over \'em! And don\'t let that firebug get away. He\'s the big catch tonight.']],
   how:'Chase down the Antifa, dodge commie tomatoes, help the neighbors, and catch the firebug with the gas can before the lock-up.',keys:KEYS_SIDE},
  {id:'l5',name:'Rush Hour',kind:'Traffic duty',make:TrafficGame,cfg:{goal:30},
   story:[['Duncan','The stoplight at Main and Water Street is busted. Some umbrella poked it, no doubt.'],['Duncan','Guess I\'m the stoplight today. Whistle ready!'],['Duncan','Keep the cars movin\'. And when an ambulance comes, wave it right on through!']],
-  how:'Tap to switch which road goes. Don\'t make drivers wait too long, and never make the ambulance wait!',keys:['<b>Touch:</b> tap anywhere to switch the traffic.','<b>Keys:</b> Space switches, or ← → for the side road and ↑ ↓ for the main road.','<b>Gamepad:</b> A switches, or push the stick the way you want traffic to go.']},
+  how:'Swipe or press SWITCH to change which road goes. Don\'t make drivers wait too long, and never make the ambulance wait!',keys:['<b>Touch:</b> swipe ← → for the side road, ↑ ↓ for the main road, or press SWITCH.','<b>Keys:</b> Space switches, or ← → for the side road and ↑ ↓ for the main road.','<b>Gamepad:</b> A switches, or push the stick the way you want traffic to go.']},
  {id:'l6',name:'Night Run',kind:'Jeep driving',make:DriveGame,cfg:{escort:'amb',dist:10000,speed:275,stubborn:0.2,umbs:0.2,gap:[150,250],night:true},
   story:[['Dispatch','Constable, the ambulance is takin\' a patient to the hospital. Rain\'s comin\' down hard!'],['Duncan','Then nobody gets in that ambulance\'s way. Not on my watch.']],
   how:'Lead the ambulance through the rainy night. Siren or ram the cars aside, and flatten the umbrellas on the road!',keys:KEYS_DRIVE},
  {id:'l7',name:'Kitty Rescue',kind:'Park rescue',make:CatGame,cfg:{goal:10},
   story:[['Granny','Constable! The umbrellas spooked all the kitties up into the big oak!'],['Duncan','Don\'t you worry, ma\'am. I brought my good blanket.'],['Duncan','When a kitty wiggles, it\'s about to jump. Get under it!']],
-  how:'Move under the kitties and catch them in the blanket. Don\'t miss three!',keys:['<b>Touch:</b> hold where you want Duncan to go.','<b>Keys:</b> ← → move, Shift runs.','<b>Gamepad:</b> stick moves.']},
+  how:'Move under the kitties and catch them in the blanket. Don\'t miss three!',keys:['<b>Touch:</b> swipe &amp; hold anywhere to move. DIVE dashes, JUMP hops.','<b>Keys:</b> ← → move, Shift runs, Space dive, ↑ jump.','<b>Gamepad:</b> stick moves, A dive, B jump.']},
  {id:'l8',name:'Catch the Firebug',kind:'Jeep chase',make:DriveGame,cfg:{chase:true,speed:290,stubborn:0.1,umbs:0.1,gap:[190,300]},
   story:[['Duncan','There he is! The firebug, on a little scooter, with a brand new gas can!'],['Duncan','Bump that scooter three times and he\'s done. Hang on to your sporran!']],
   how:'Chase the firebug\'s scooter. Bump it three times to stop him. Cars in the way will slow you down.',keys:KEYS_DRIVE},
@@ -806,7 +851,7 @@ function drawTitle(){const img=G.img.cover;cx.save();cx.filter='blur(14px) brigh
  const lx=x+w*0.66,ly=y+h*0.395,ph=Math.floor(G.t*5)%2;cx.globalCompositeOperation='lighter';const gr=cx.createRadialGradient(lx,ly,1,lx,ly,w*0.12);gr.addColorStop(0,ph?'rgba(255,40,40,.5)':'rgba(40,90,255,.5)');gr.addColorStop(1,'rgba(0,0,0,0)');cx.fillStyle=gr;cx.fillRect(x,y,w,h);cx.restore()}
 /* ================= LOOP ================= */
 let last=performance.now(),hudTxt='';
-function frame(now){const dt=Math.min(0.05,(now-last)/1000);last=now;G.t+=dt;pollPad();
+function frame(now){const dt=Math.min(0.05,(now-last)/1000);last=now;G.t+=dt;pollPad();padSync();
  cx.setTransform(G.dpr,0,0,G.dpr,0,0);
  if(G.mode==='title'||G.mode==='levels'||G.mode==='loading'){if(G.img.cover&&G.img.cover.complete&&G.img.cover.naturalWidth)drawTitle();else{cx.fillStyle='#1b1226';cx.fillRect(0,0,G.W,G.H)}}
  else if(G.game){const g=G.game;try{if(G.mode==='play'&&!G.paused)g.update(dt);else if(g.update2)g.update2(dt);cx.setTransform(G.dpr,0,0,G.dpr,0,0);g.draw()}catch(e){console.error(e);throw e}
@@ -814,4 +859,4 @@ function frame(now){const dt=Math.min(0.05,(now-last)/1000);last=now;G.t+=dt;pol
  requestAnimationFrame(frame)}
 loadAll(()=>{goTitle();requestAnimationFrame(frame)});
 /* QA / debug hooks */
-window.__cd={G,LV,startLevel,finish,goTitle,RD,RP,pose,stepGait,mkGait,cadence};
+window.__cd={TOUCH,VIRT,G,LV,startLevel,finish,goTitle,RD,RP,pose,stepGait,mkGait,cadence};
