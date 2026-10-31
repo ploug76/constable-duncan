@@ -62,9 +62,9 @@ body.land #htKeys{font-size:15px}
 #pad{position:fixed;left:0;right:0;z-index:4;touch-action:none;pointer-events:none}
 #pad[hidden]{display:none}
 body.padmode #pad{pointer-events:auto;background:radial-gradient(ellipse at 50% 0%,rgba(255,210,63,.14),transparent 70%),linear-gradient(#2a1d3a,#140c1e);border-top:3px solid #ffd23f}
-#pad .big{position:absolute;pointer-events:auto;border-radius:50%;font:20px Lilita,system-ui,sans-serif;letter-spacing:1px;color:#fff;border:3px solid #ffffffbb;text-shadow:0 2px 3px #000a;touch-action:none;opacity:.92;padding:0;min-height:0;display:flex;align-items:center;justify-content:center;line-height:1}
-#bAct{background:radial-gradient(circle at 35% 30%,#ffe0b0,#ff8a1a 55%,#a03a00);box-shadow:0 0 22px #ff9a3a99,inset 0 -6px 12px #0006}
-#bJump{background:radial-gradient(circle at 35% 30%,#d8ffd0,#38b040 55%,#0a5a12);box-shadow:0 0 18px #50d06099,inset 0 -6px 12px #0006}
+#pad .big{font-weight:900;border-color:#fff;position:absolute;pointer-events:auto;border-radius:50%;font:20px Lilita,system-ui,sans-serif;letter-spacing:1px;color:#fff;border:3px solid #ffffffbb;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 2px 0 #000,0 -2px 0 #000,2px 0 0 #000,-2px 0 0 #000;touch-action:none;opacity:.92;padding:0;min-height:0;display:flex;align-items:center;justify-content:center;line-height:1}
+#bAct{background:radial-gradient(circle at 35% 30%,#d8ffd0,#38b040 55%,#0a5a12);box-shadow:0 0 18px #50d06099,inset 0 -6px 12px #0006;font-size:18px!important}
+#bJump{background:radial-gradient(circle at 35% 30%,#ffe0b0,#ff8a1a 55%,#a03a00);box-shadow:0 0 22px #ff9a3a99,inset 0 -6px 12px #0006;font-size:25px!important}
 #pad .big.on{transform:scale(.92);filter:brightness(1.3)}
 #pad .big.dim{opacity:.35;filter:grayscale(.8)}
 body.land #pad .big{opacity:.8}
