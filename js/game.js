@@ -556,11 +556,11 @@ function drawUmbTop(c,u){c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.arc(4,5,15
  c.fillStyle='#5a4030';c.beginPath();c.arc(0,0,7,0,TAU);c.fill();c.fillStyle='#ffef9a';c.beginPath();c.arc(-3,-9,2,0,TAU);c.arc(3,-9,2,0,TAU);c.fill()}
 function hash(n){const s=Math.sin(n*127.1+311.7)*43758.5453;return s-Math.floor(s)}
 function DriveGame(cfg){
- const g={F:[],t:0,J:{a:0,d:0,v:cfg.speed||260,slow:0},cars:[],umbs:[],blocked:0,knocked:0,umbBust:0,siren:0,started:false,spawnD:400,cfgChase:!!cfg.chase,rain:cfg.night?[]:null};
+ const g={F:[],t:0,J:{a:0,d:0,v:cfg.speed||260,slow:0},cars:[],umbs:[],blocked:0,knocked:0,umbBust:0,siren:0,started:false,spawnD:400,cfgChase:!!cfg.chase,rain:(cfg.night||cfg.rain)?[]:null};
  const J=g.J;g.esc=cfg.escort?{a:0,d:-150,v:J.v,blk:0,type:cfg.escort}:null;
  if(cfg.chase)g.sc={a:0,d:340,v:250,hits:0,wob:0,boost:0,lane:0,lt:1};
  g.k=()=>G.land?G.H/320:G.W/320;g.vlen=()=>(G.land?G.W:G.H)/g.k();
- g.start=()=>{g.started=true;toast(cfg.chase?'Catch that firebug!':cfg.escort==='amb'?'Clear the road for the ambulance!':'Clear the road for the fire truck!',1600);Sound.play('siren')};
+ g.start=()=>{g.started=true;toast(cfg.tow?'Tow the boat to the flood!':cfg.chase?'Catch that firebug!':cfg.escort==='amb'?'Clear the road for the ambulance!':'Clear the road for the fire truck!',1600);Sound.play('siren')};
  function spawn(){const vl=g.vlen();while(g.spawnD<J.d+vl+200){const lanes=[-60,0,60];const ln=pick(lanes);const st=Math.random()<(cfg.stubborn||0);
    g.cars.push({a:ln,d:g.spawnD,v:rnd(120,170)*(cfg.chase?0.9:1),col:st?'#c81e2a':pick(CARCOL),st:st?'stub':'drive',va:0,rot:0,ta:ln,w:32,l:54});
    if(Math.random()<(cfg.umbs||0))g.umbs.push({a:pick(lanes)+rnd(-15,15),d:g.spawnD+rnd(60,140),hit:0});
@@ -598,10 +598,10 @@ function DriveGame(cfg){
    if(Math.abs(S.a-J.a)<26&&Math.abs(S.d-J.d)<40&&S.wob<=0){S.hits++;S.wob=1.2;S.boost=1.1;Sound.play('crash');fxBurst(g.F,S.a,-S.d,16,'star',150,0.6,4,0);fxText(g.F,S.a,-S.d-40,['BUMP!','BUMP! BUMP!','GOTCHA!'][S.hits-1]||'BUMP!','#ffd23f',16);
     if(S.hits>=3){S.done=true;g.over=true;Sound.play('bust');const tt=g.t;setTimeout(()=>finish(true,tt<40?3:tt<60?2:1,'You caught the firebug! His gas can is confiscated and his scooter is impounded.'),1300)}}}
   /* goal */
-  if(!cfg.chase&&!g.over&&J.d>=cfg.dist){g.over=true;const b=g.blocked;const st=b<2?3:b<6?2:1;finish(true,st,`${E.type==='amb'?'The ambulance':'The fire truck'} made it! Blocked for ${b.toFixed(1)} seconds. Cars cleared: ${g.knocked}. Umbrellas busted: ${g.umbBust}.`)}
+  if(!cfg.chase&&!g.over&&J.d>=cfg.dist){g.over=true;if(cfg.onDone){cfg.onDone(g);return}const b=g.blocked;const st=b<2?3:b<6?2:1;finish(true,st,`${E.type==='amb'?'The ambulance':'The fire truck'} made it! Blocked for ${b.toFixed(1)} seconds. Cars cleared: ${g.knocked}. Umbrellas busted: ${g.umbBust}.`)}
   fxStep(g.F,dt);
   if(g.rain){if(g.rain.length<120)for(let i=0;i<6;i++)g.rain.push({x:Math.random()*G.W,y:Math.random()*G.H,l:rnd(0.2,0.6)});for(const r of g.rain){r.l-=dt;if(r.l<0){r.x=Math.random()*G.W;r.y=Math.random()*G.H;r.l=rnd(0.2,0.6)}}}};
- g.hud=()=>{if(g.sc)return`Bumps ${g.sc.hits}/3  ${Math.floor(g.t)}s`;const p=clamp(Math.floor(g.J.d/cfg.dist*100),0,100);return`${g.esc.type==='amb'?'🚑':'🚒'} ${p}%  Blocked ${g.blocked.toFixed(1)}s`};
+ g.hud=()=>{if(cfg.tow)return`🚤 ${clamp(Math.floor(g.J.d/cfg.dist*100),0,100)}% to the flood`;if(g.sc)return`Bumps ${g.sc.hits}/3  ${Math.floor(g.t)}s`;const p=clamp(Math.floor(g.J.d/cfg.dist*100),0,100);return`${g.esc.type==='amb'?'🚑':'🚒'} ${p}%  Blocked ${g.blocked.toFixed(1)}s`};
  g.draw=()=>{const k=g.k(),cam=J.d-(G.land?170:190);const d=G.dpr;
   cx.fillStyle=cfg.night?'#1a2a1a':'#4a8a3a';cx.fillRect(0,0,G.W,G.H);
 
@@ -622,13 +622,14 @@ function DriveGame(cfg){
   if(g.sc&&!(g.sc.done&&g.over&&false)){const S=g.sc;cx.save();cx.translate(S.a,-S.d);drawScooter(cx,g.t,S.wob);if(S.done){cx.strokeStyle='#d8dce4';cx.lineWidth=2;cx.beginPath();cx.arc(-4,-4,4,0,TAU);cx.arc(4,-4,4,0,TAU);cx.stroke()}cx.restore();
    if(!S.done){cx.save();cx.translate(S.a,-S.d-34);cx.fillStyle='#ffd23f';cx.beginPath();cx.moveTo(-6,-10);cx.lineTo(6,-10);cx.lineTo(0,0);cx.fill();cx.restore()}}
   const E=g.esc;if(E){cx.save();cx.translate(E.a,-E.d);E.type==='amb'?drawAmb(cx,g.t):drawFireTruck(cx,g.t);cx.restore();}
-  cx.save();cx.translate(J.a,-J.d);cx.rotate(J.rot||0);drawJeep(cx,g.t,J.slow>0);cx.restore();
+  cx.save();cx.translate(J.a,-J.d);cx.rotate(J.rot||0);if(cfg.tow){cx.save();cx.translate(0,40);cx.rotate(-(J.rot||0)*0.6);cx.fillStyle='#333';cx.fillRect(-2,-10,4,14);cx.fillStyle='#555';cx.fillRect(-16,4,32,62);cx.fillStyle='#111';cx.fillRect(-21,30,6,14);cx.fillRect(15,30,6,14);cx.translate(0,36);cx.rotate(-Math.PI/2);drawBoatTop(cx,g.t,[],null,false);cx.restore()}drawJeep(cx,g.t,J.slow>0);cx.restore();
   if(g.siren>1.4){cx.strokeStyle='rgba(150,200,255,'+((g.siren-1.4)*0.8)+')';cx.lineWidth=3;cx.beginPath();cx.arc(J.a,-J.d,(2.2-g.siren)*300+20,0,TAU);cx.stroke()}
   fxDraw(cx,g.F.filter(p=>!p.txt),1);
   cx.restore();
   const TS=(a,dd)=>G.land?[(dd-cam)*k,G.H/2+a*k]:[G.W/2+a*k,G.H-(dd-cam)*k];
   for(const p of g.F)if(p.txt){const q=TS(p.x,-p.y);const a=clamp(p.l/p.l0*1.6,0,1);cx.globalAlpha=a;const fs=p.s*k;cx.font=fs+'px Lilita,system-ui,sans-serif';cx.textAlign='center';cx.lineWidth=fs*0.22;cx.strokeStyle='#2a0a05';cx.strokeText(p.txt,q[0],q[1]);cx.fillStyle=p.c;cx.fillText(p.txt,q[0],q[1]);cx.globalAlpha=1}
   if(E&&E.isBlk){const q=TS(E.a,E.d+(G.land?70:66));cx.fillStyle='#ff4a3a';cx.strokeStyle='#fff';cx.lineWidth=4;cx.font='30px Lilita,system-ui';cx.textAlign='center';cx.strokeText('!',q[0],q[1]);cx.fillText('!',q[0],q[1])}
+  if(!cfg.night&&g.rain){cx.fillStyle='rgba(20,30,60,.2)';cx.fillRect(0,0,G.W,G.H);cx.strokeStyle='rgba(200,220,255,.4)';cx.lineWidth=1;cx.beginPath();for(const r of g.rain){cx.moveTo(r.x,r.y);cx.lineTo(r.x-2,r.y+10)}cx.stroke()}
   if(cfg.night){cx.fillStyle='rgba(8,10,40,.42)';cx.fillRect(0,0,G.W,G.H);cx.strokeStyle='rgba(180,200,255,.35)';cx.lineWidth=1;cx.beginPath();for(const r of g.rain){cx.moveTo(r.x,r.y);cx.lineTo(r.x-2,r.y+10)}cx.stroke()}};
  /* QA autopilot: steer at the nearest car ahead in the escort's path, use the siren on groups */
  g.autoplay=()=>{if(g.sc){return g.sc.a}let tg=null;for(const c of g.cars){if(c.st==='off'||c.st==='yield')continue;if(c.d>J.d&&c.d<J.d+260&&(!tg||c.d<tg.d))tg=c}
@@ -659,9 +660,9 @@ function FireGame(cfg){
  g.L=()=>{const land=G.land;let S,ox,oy,gY,k;if(land){S=G.W/1280;ox=0;oy=-40*S;gY=G.H*0.97;k=G.H*0.2/106}else{S=G.W/920;ox=-180*S;oy=Math.max(54,G.H*0.07);gY=G.H*0.87;k=G.H*0.155/106}return{S,ox,oy,gY,k,vw:G.W/k}};
  const L0=g.L();D.x=170;
  g.tasks=()=>{const L=g.L();return[{x:L.vw-34,label:'Hook the hose to the hydrant!'},{x:L.vw*(G.land?0.5:0.46),label:'Bring a hose to the fire crew!'}]};
- g.start=()=>{g.started=true;toast('Run the hose!',1300)};
+ g.start=()=>{g.started=true;toast(cfg.toast||'Run the hose!',1500)};
  g.act=()=>{if(!g.started||g.over)return;if(g.phase==='hose'){const T=g.tasks()[g.task];if(g.hold&&Math.abs(D.x-T.x)<40){g.hold=false;Sound.play('cuff');fxText(g.F,T.x,-120,g.task===0?'Hooked up!':'Here ya go!','#9effa0',15);g.task++;
-    if(g.task>=2){g.phase='spray';g.W[1].f=0.5;g.W[3].f=0.45;g.ars.on=true;g.ars.x=g.L().vw*0.3;toast('Aim the water at the fire!',1500)}}}};
+    if(g.task>=2){g.phase='spray';(cfg.startW||[1,3]).forEach((i,j)=>{g.W[i].f=j?0.45:0.5});g.ars.on=cfg.ars!==false;g.ars.x=g.L().vw*0.3;toast('Aim the water at the fire!',1500)}}}};
  g.down=p=>{};g.move=p=>{};g.up=p=>{};D.vy=0;
  g.jump=()=>{if(!g.started||g.over||g.phase!=='hose')return;if(D.y>=-0.5){D.vy=-320;D.y=-1;Sound.play('jump')}};
  g.btns=()=>g.phase==='hose'?['JUMP',g.hold?'HOOK UP':'ACTION']:['','SPRAY'];g.hint=()=>g.phase==='hose'?'SWIPE &amp; HOLD ANYWHERE TO MOVE<br>SWIPE UP TO JUMP':'SWIPE &amp; HOLD TO AIM THE WATER<br>HOLD SPRAY TO SPRAY';
@@ -680,8 +681,8 @@ function FireGame(cfg){
    if(g.retOn){for(const w of g.W){if(w.f<=0)continue;const r=w.r,x0=L.ox+r[0]*L.S-14,x1=L.ox+r[2]*L.S+14,y0=L.oy+r[1]*L.S-14,y1=L.oy+r[3]*L.S+14;
      if(g.ret.x>x0&&g.ret.x<x1&&g.ret.y>y0&&g.ret.y<y1){w.f-=dt*0.95;if(Math.random()<dt*20)g.smoke.push({x:g.ret.x+rnd(-10,10),y:g.ret.y,l:1.2,s:rnd(6,12)});
       if(w.f<=0){w.f=0;w.full=0;g.done++;Sound.play('star');fxText(g.F,g.ret.x/k,(g.ret.y-L.gY)/k,'Out!','#9ad8ff',16);if(g.done>=g.goal&&!g.over){g.over=true;Sound.setHiss(0);const st=g.spreads===0?3:g.spreads<=2?2:1;setTimeout(()=>finish(true,st,`You and the fire crew put out ${g.done} fires! Fire spread ${g.spreads} time${g.spreads===1?'':'s'}.`),900)}}}}}
-   const burning=g.W.filter(w=>w.f>0).length;g.ig-=dt;if(g.ig<=0&&burning<4&&g.done+burning<g.goal){g.ig=Math.max(1.6,3.2-g.t*0.02);const c=g.W.filter(w=>w.f<=0);if(c.length){pick(c).f=0.35;Sound.play('pop')}}
-   for(const w of g.W){if(w.f<=0)continue;w.f=Math.min(1,w.f+dt*0.075);if(w.f>=1){w.full+=dt;if(w.full>6){w.full=-4;g.spreads++;fxText(g.F,(L.ox+(w.r[0]+w.r[2])/2*L.S)/k,(L.oy+w.r[1]*L.S-L.gY)/k,'It spread!','#ff8a5a',14);
+   const burning=g.W.filter(w=>w.f>0).length;g.ig-=dt;if(g.ig<=0&&burning<(cfg.maxBurn||4)&&g.done+burning<g.goal){g.ig=Math.max(cfg.igMin||1.6,(cfg.ig0||3.2)-g.t*0.02);const c=g.W.filter(w=>w.f<=0);if(c.length){pick(c).f=0.35;Sound.play('pop')}}
+   for(const w of g.W){if(w.f<=0)continue;w.f=Math.min(1,w.f+dt*(cfg.grow||0.075));if(w.f>=1){w.full+=dt;if(w.full>(cfg.spreadT||6)){w.full=-4;g.spreads++;fxText(g.F,(L.ox+(w.r[0]+w.r[2])/2*L.S)/k,(L.oy+w.r[1]*L.S-L.gY)/k,'It spread!','#ff8a5a',14);
       const nb=g.W.filter(o=>o.f<=0&&Math.abs(o.r[0]-w.r[0])+Math.abs(o.r[1]-w.r[1])<500);if(nb.length&&g.done+burning<g.goal)pick(nb).f=0.5}}}
    for(const c of g.crew){stepGait(c.o,0,dt,RP,true)}
    D.ov={t:'point'};D.o.ov=D.ov;stepGait(D.o,0,dt,RD,true);
@@ -691,7 +692,7 @@ function FireGame(cfg){
  g.hud=()=>g.phase==='hose'?`Hoses ${g.task}/2`:`Fires out ${g.done}/${g.goal}  Spread ${g.spreads}`;
  g.draw=()=>{const L=g.L(),k=L.k,S=L.S,img=G.img.house;
   cx.fillStyle='#2a1838';cx.fillRect(0,0,G.W,G.H);cx.drawImage(img,0,0,img.width,2,0,0,G.W,L.oy+1);
-  cx.drawImage(img,L.ox,L.oy,1280*S,720*S);const ib=L.oy+720*S;
+  cx.drawImage(img,L.ox,L.oy,1280*S,720*S);if(cfg.night){cx.fillStyle='rgba(10,12,48,.5)';cx.fillRect(0,0,G.W,G.H)}const ib=L.oy+720*S;
   if(ib<L.gY-10*k){const gr=cx.createLinearGradient(0,ib,0,L.gY);gr.addColorStop(0,'#3a4a2a');gr.addColorStop(1,'#2a3420');cx.fillStyle=gr;cx.fillRect(0,ib,G.W,L.gY-ib)}
   cx.fillStyle='#8a8070';cx.fillRect(0,L.gY-8*k,G.W,6*k);cx.fillStyle='#34343a';cx.fillRect(0,L.gY-2*k,G.W,G.H);
   for(const w of g.W)if(w.f>0){const r=w.r;drawFlames(cx,L.ox+r[0]*S,L.oy+r[1]*S,L.ox+r[2]*S,L.oy+r[3]*S,w.f,g.t,w.id);if(w.f>0.7&&Math.random()<0.3)g.smoke.push({x:L.ox+(r[0]+r[2])/2*S+rnd(-20,20),y:L.oy+r[1]*S,l:1.6,s:rnd(8,14),dark:1})}
@@ -806,6 +807,148 @@ function TrafficGame(cfg){
   cx.fillStyle='#dccb9f';cx.beginPath();cx.ellipse(0,3,7,6,0,0,TAU);cx.fill();cx.fillStyle='#161616';cx.beginPath();cx.arc(0,0,6.5,0,TAU);cx.fill();cx.fillRect(-4,-10,8,5);cx.fillStyle='#ddd';cx.beginPath();cx.arc(0,-2,1.5,0,TAU);cx.fill();cx.restore();
   fxDraw(cx,g.F,1);cx.restore()};
  return g}
+/* ================= SHOOTING RANGE (water cannon at cardboard cutouts) ================= */
+function ShootGame(cfg){
+ const g={F:[],t:0,started:false,hits:0,goal:cfg.goal||15,oops:0,miss:0,ammo:cfg.ammo||8,maxAmmo:cfg.ammo||8,reload:0,ret:{x:0,y:0},retOn:false,T:[],spawnT:0.8,shotT:0,cd:0,d:{o:mkGait()}};
+ const D=g.d;
+ g.L=()=>{const land=G.land,gY=land?G.H*0.97:G.H*0.92,rg=land?G.H*0.2:G.H*0.16,k=land?G.H*0.2/106:Math.min(G.H*0.17,G.W*0.36)/106;
+  return{land,gY,k,rows:[gY-rg*2.15,gY-rg*1.1,gY-rg*0.1],sc:[k*0.62,k*0.8,k*1.0],x0:G.W*(land?0.2:0.26),x1:G.W*(land?0.78:0.95),dx:G.W*(land?0.075:0.11)}};
+ g.start=()=>{g.started=true;g.ret.x=G.W*0.6;g.ret.y=G.H*0.5;toast(cfg.toast||'Squirt the bad guys! Not the neighbors!',1700)};
+ function spawn(){const L=g.L();const row=Math.floor(Math.random()*3),s=L.sc[row];
+  for(let tries=0;tries<8;tries++){const x=rnd(L.x0,L.x1);if(g.T.some(t=>t.row===row&&t.st!=='gone'&&Math.abs(t.x-x)<58*s))continue;
+   const good=Math.random()<(cfg.goodP||0.25);const kind=good?pick(['granny','kid','farmer']):pick(['umb','umb','antifa','commie']);
+   g.T.push({row,x,kind,good,up:0,st:'rise',life:(cfg.life||2.8)*rnd(0.85,1.15),vx:cfg.move?pick([-1,1])*rnd(40,80)*s/L.k:0,o:mkGait(),tilt:0});return}}
+ function tgtBox(t,L){const s=L.sc[t.row],h=(t.kind==='umb'?140:108)*s*t.up;return{x0:t.x-30*s,x1:t.x+30*s,y0:L.rows[t.row]-h,y1:L.rows[t.row]+4}}
+ g.act=()=>{if(!g.started||g.over||g.cd>0)return;if(g.reload>0)return;if(g.ammo<=0){Sound.play('click');toast('Out of water! Press RELOAD',1000);return}
+  g.ammo--;g.cd=0.18;g.shotT=0.28;Sound.play('splat');const L=g.L(),rx=g.ret.x,ry=g.ret.y;
+  fxBurst(g.F,rx,ry,12,['#bfe4ff','#ffffff','#7cc4ff'],140,0.5,3,300);
+  const live=g.T.filter(t=>(t.st==='up'||t.st==='rise')&&t.up>0.5).sort((a,b)=>b.row-a.row);
+  for(const t of live){const b=tgtBox(t,L);if(rx>b.x0-8&&rx<b.x1+8&&ry>b.y0-8&&ry<b.y1){t.st='hit';t.wet=1;
+    if(t.good){g.oops++;Sound.play('hurt');fxText(g.F,t.x,b.y0-10,pick(['Hey! I\'m a neighbor!','Oops! Sorry!','Not me, Constable!']),'#ff9a8a',15)}
+    else{g.hits++;Sound.play('bust');fxText(g.F,t.x,b.y0-10,pick(['SPLASH!','SOAKED!','Bullseye!','Got \'em!']),'#ffd23f',17);fxBurst(g.F,t.x,(b.y0+b.y1)/2,16,'star',150,0.6,4,0);
+     if(g.hits>=g.goal&&!g.over){g.over=true;const tt=g.t,st=g.oops===0&&tt<(cfg.par||70)?3:g.oops<=2?2:1;setTimeout(()=>finish(true,st,`You soaked ${g.hits} cardboard troublemakers in ${Math.round(tt)} seconds! Neighbors splashed by mistake: ${g.oops}.`),1100)}}
+    return}}
+  g.miss++};
+ g.jump=()=>{if(!g.started||g.over||g.reload>0||g.ammo===g.maxAmmo)return;g.reload=0.8;Sound.play('jump');fxText(g.F,G.W*(G.land?0.1:0.14),g.L().gY-120*g.L().k,'Filling up!','#9ad8ff',14)};
+ g.swipeJump=false;g.drag=(dx,dy)=>{g.ret.x=clamp(g.ret.x+dx*1.5,0,G.W);g.ret.y=clamp(g.ret.y+dy*1.5,0,G.H);g.retOn=true};
+ g.btns=()=>[(g.reload>0||g.ammo===g.maxAmmo)?'~RELOAD':'RELOAD',(g.ammo>0&&g.reload<=0)?'SQUIRT':'~SQUIRT'];
+ g.hint=()=>'SWIPE &amp; HOLD TO AIM<br>SQUIRT TO SHOOT · RELOAD FOR MORE WATER';
+ g.hud=()=>`Soaked ${g.hits}/${g.goal}  💧${g.reload>0?'…':g.ammo}  Oops ${g.oops}`;
+ g.update=dt=>{g.t+=dt;if(!g.started)return;const L=g.L();if(g.cd>0)g.cd-=dt;if(g.shotT>0)g.shotT-=dt;
+  if(g.reload>0){g.reload-=dt;if(g.reload<=0){g.reload=0;g.ammo=g.maxAmmo;Sound.play('cuff')}}
+  if(G.auto)g.autoplay(dt);else{const k=G.keys,ax=clamp(((k.ArrowRight||k.KeyD)?1:0)-((k.ArrowLeft||k.KeyA)?1:0)+G.pad.ax,-1,1),ay=clamp(((k.ArrowDown||k.KeyS)?1:0)-((k.ArrowUp||k.KeyW)?1:0)+G.pad.ay,-1,1);if(ax||ay){g.ret.x=clamp(g.ret.x+ax*520*dt,0,G.W);g.ret.y=clamp(g.ret.y+ay*520*dt,0,G.H)}}
+  g.spawnT-=dt;const up=g.T.filter(t=>t.st!=='gone').length;if(g.spawnT<=0&&up<(cfg.maxUp||4)){spawn();g.spawnT=Math.max(cfg.rateMin||0.55,(cfg.rate||1.2)-g.t*0.006)}
+  for(const t of g.T){if(t.st==='rise'){t.up=Math.min(1,t.up+dt*5);if(t.up>=1)t.st='up'}
+   else if(t.st==='up'){t.life-=dt;if(t.life<=0)t.st='down'}
+   else if(t.st==='hit'){t.tilt=Math.min(1,t.tilt+dt*4);if(t.tilt>=1)t.st='down'}
+   else if(t.st==='down'){t.up-=dt*4;if(t.up<=0){t.up=0;t.st='gone'}}
+   if(t.vx&&t.st!=='hit'){t.x+=t.vx*L.k*dt;if(t.x<L.x0||t.x>L.x1){t.vx=-t.vx;t.x=clamp(t.x,L.x0,L.x1)}stepGait(t.o,Math.abs(t.vx*L.k*dt),dt,RP,true)}}
+  g.T=g.T.filter(t=>t.st!=='gone');stepGait(D.o,0,dt,RD,true);fxStep(g.F,dt)};
+ g.autoplay=dt=>{if(g.ammo<=0&&g.reload<=0){g.jump();return}const L=g.L();let best=null;for(const t of g.T){if(t.good||t.st==='hit'||t.st==='down')continue;if(!best||t.row>best.row)best=t}
+  if(!best)return;const b=tgtBox(best,L),tx=best.x,ty=(b.y0+b.y1)/2;g.ret.x+=(tx-g.ret.x)*Math.min(1,dt*9);g.ret.y+=(ty-g.ret.y)*Math.min(1,dt*9);
+  if(Math.abs(g.ret.x-tx)<8&&Math.abs(g.ret.y-ty)<10&&best.up>0.8)g.act()};
+ function cutout(t,L){const s=L.sc[t.row];cx.save();cx.translate(t.x,L.rows[t.row]);cx.fillStyle='#7a5a3a';cx.fillRect(-3*s,-30*s,6*s,34*s);
+  cx.scale(s,s*t.up);if(t.tilt){cx.transform(1,0,-t.tilt*0.3,1-t.tilt*0.55,0,0)}
+  if(t.kind==='umb'){drawUmb(cx,{op:0,shake:0},1)}else{if(t.vx<0)cx.scale(-1,1);t.o.ov=null;drawPerson(cx,t.o,LOOK[t.kind])}
+  if(!t.good){cx.save();cx.translate(0,t.kind==='umb'?-92:-62);cx.globalAlpha=0.85;for(const [r,c] of[[11,'#fff'],[8,'#e8322a'],[5,'#fff'],[2.5,'#e8322a']]){cx.fillStyle=c;cx.beginPath();cx.arc(0,0,r,0,TAU);cx.fill()}cx.restore()}
+  else{cx.save();cx.translate(0,-112);cx.fillStyle='#3ab04a';cx.strokeStyle='#fff';cx.lineWidth=2;cx.beginPath();cx.arc(0,0,9,0,TAU);cx.fill();cx.stroke();cx.strokeStyle='#fff';cx.lineWidth=2.5;cx.beginPath();cx.moveTo(-4,0);cx.lineTo(-1,3);cx.lineTo(4,-3);cx.stroke();cx.restore()}
+  if(t.wet){cx.fillStyle='rgba(120,190,255,.35)';cx.fillRect(-30,-140,60,140)}
+  cx.restore()}
+ function fence(y,s){cx.fillStyle='#8a5a32';cx.fillRect(0,y-26*s,G.W,26*s);cx.fillStyle='#a8743e';for(let x=0;x<G.W;x+=22*s){cx.fillRect(x+1,y-30*s,18*s,30*s)}cx.fillStyle='rgba(0,0,0,.25)';cx.fillRect(0,y-4*s,G.W,4*s)}
+ g.draw=()=>{const L=g.L(),img=G.img[cfg.bg||'park'],bgH=Math.max(L.land?G.H*1.04:G.H*0.8,L.gY/(cfg.gy||0.88)+2);drawTiledBG(img,cfg.gy||0.88,L.gY,bgH,0,cfg.dim||null);
+  for(let r=0;r<3;r++){for(const t of g.T)if(t.row===r)cutout(t,L);fence(L.rows[r]+6*L.sc[r],L.sc[r])}
+  /* Duncan and the water cannon */
+  const dx=G.W*(L.land?0.1:0.12);cx.save();cx.translate(dx,L.gY);cx.scale(L.k,L.k);D.o.ov={t:'point'};drawDuncan(cx,D.o);
+  cx.fillStyle='#2a6ad8';rr(cx,-34,-62,16,30,4);cx.fill();cx.fillStyle='#bfe4ff';const lv=g.reload>0?1-g.reload/0.8:g.ammo/g.maxAmmo;cx.fillRect(-31,-35-24*lv,10,24*lv);cx.restore();
+  if(g.shotT>0){const h=D.o._hand||[22,-62],nx=dx+h[0]*L.k,ny=L.gY+h[1]*L.k,tx=g.ret.x,ty=g.ret.y,mx=(nx+tx)/2,my=Math.min(ny,ty)-Math.abs(tx-nx)*0.15-20;
+   cx.globalAlpha=Math.min(1,g.shotT*5);cx.strokeStyle='rgba(170,215,255,.6)';cx.lineWidth=8;cx.lineCap='round';cx.beginPath();cx.moveTo(nx,ny);cx.quadraticCurveTo(mx,my,tx,ty);cx.stroke();cx.strokeStyle='rgba(240,250,255,.9)';cx.lineWidth=3;cx.stroke();cx.globalAlpha=1}
+  if(cfg.dim){cx.fillStyle='rgba(255,230,150,.08)';cx.fillRect(0,0,G.W,G.H)}
+  fxDraw(cx,g.F,1);
+  const rx=g.ret.x,ry=g.ret.y;cx.strokeStyle='#fff';cx.lineWidth=2.5;cx.beginPath();cx.arc(rx,ry,18,0,TAU);cx.moveTo(rx-26,ry);cx.lineTo(rx-10,ry);cx.moveTo(rx+10,ry);cx.lineTo(rx+26,ry);cx.moveTo(rx,ry-26);cx.lineTo(rx,ry-10);cx.moveTo(rx,ry+10);cx.lineTo(rx,ry+26);cx.stroke();
+  cx.fillStyle='#e8322a';cx.beginPath();cx.arc(rx,ry,3,0,TAU);cx.fill()};
+ return g}
+/* ================= FLOOD RESCUE: tow the boat with the Jeep, then the inflatable boat ================= */
+function drawBoatTop(c,t,riders,face,moving){/* faces +x */const L=34,W=17;
+ if(moving){c.strokeStyle='rgba(255,255,255,.55)';c.lineWidth=2.5;c.beginPath();c.moveTo(-L-4,-W*0.6);c.lineTo(-L-30,-W*1.5-Math.sin(t*9)*2);c.moveTo(-L-4,W*0.6);c.lineTo(-L-30,W*1.5+Math.sin(t*9)*2);c.stroke()}
+ c.fillStyle='rgba(0,0,0,.25)';rr(c,-L+3,-W+4,L*2,W*2,W);c.fill();
+ c.fillStyle='#e8662a';rr(c,-L,-W,L*2,W*2,W);c.fill();c.strokeStyle='#7a2a10';c.lineWidth=1.5;c.stroke();
+ c.fillStyle='#4a4a52';rr(c,-L+7,-W+6,L*2-16,W*2-12,W-6);c.fill();
+ c.fillStyle='#fff';c.fillRect(-6,-W+1,12,3);c.fillRect(-6,W-4,12,3);
+ c.fillStyle='#222';rr(c,-L-9,-6,12,12,3);c.fill();c.fillStyle='#555';c.fillRect(-L-12,-2,5,4);
+ const seats=[[16,0],[4,-6],[4,6],[-8,0]];(riders||[]).forEach((r,i)=>{const p=seats[i]||[0,0];c.fillStyle=r.col||'#e8604a';c.beginPath();c.arc(p[0],p[1],5.2,0,TAU);c.fill();c.fillStyle=r.hair||'#7a4a20';c.beginPath();c.arc(p[0]-1.5,p[1],3.6,0,TAU);c.fill()});
+ if(face&&face.naturalWidth){c.save();c.beginPath();c.arc(-L+12,0,8,0,TAU);c.clip();c.rotate(Math.PI/2);c.drawImage(face,-9,-9,18,18);c.restore();c.strokeStyle='#2e2012';c.lineWidth=1.2;c.beginPath();c.arc(-L+12,0,8,0,TAU);c.stroke()}
+ else{c.fillStyle='#eab48c';c.beginPath();c.arc(-L+12,0,7,0,TAU);c.fill()}}
+function FloodGame(cfg){
+ const g={phase:'tow',F:[],t:0,started:false,swipeJump:false};
+ const tow=DriveGame({tow:true,dist:cfg.towDist||5200,speed:255,stubborn:0.1,umbs:0.12,gap:[200,320],rain:true,onDone:()=>{toast('Launch the boat!',1400);fxText(tow.F,tow.J.a,-tow.J.d-70,'We made it to the flood!','#ffd23f',14);setTimeout(()=>{if(g.phase==='tow'&&G.game===g){g.phase='boat';B.start()}},1300)}});
+ const B=BoatGame(cfg);g.tow=tow;g.B=B;const cur=()=>g.phase==='tow'?tow:B;
+ g.start=()=>{g.started=true;tow.start()};
+ g.update=dt=>{g.t+=dt;cur().update(dt)};g.draw=()=>cur().draw();
+ g.act=()=>cur().act();g.jump=()=>cur().jump();g.btns=()=>cur().btns();g.hint=()=>cur().hint();g.hud=()=>cur().hud();
+ return g}
+function BoatGame(cfg){
+ const SP=cfg.spots||[[0.42,0.14,'roof','granny'],[0.8,0.1,'roof','kid'],[0.6,0.33,'car','farmer'],[0.9,0.38,'roof','mom'],[0.38,0.5,'tree','kid'],[0.7,0.58,'roof','cat'],[0.48,0.78,'car','granny'],[0.9,0.62,'roof','farmer']];
+ const g={F:[],t:0,started:false,rescued:0,bumps:0,goal:SP.length,cap:cfg.cap||3,seats:[],shore:[],
+  P:SP.map((s,i)=>({u:s[0],v:s[1],kind:s[2],who:s[3],st:'wait',o:mkGait(),id:i})),
+  logs:[0,1,2,3].slice(0,cfg.logs||3).map(i=>({u:rnd(0.3,0.95),v:rnd(0,1),a:rnd(0,3),sp:rnd(0.035,0.06)})),
+  b:{u:0.2,v:0.45,vx:0,vy:0,ang:0,slow:0,boost:0,bcd:0}};
+ const b=g.b;
+ g.S=()=>Math.min(G.W,G.H)/360;
+ g.start=()=>{g.started=true;toast('Rescue everybody from the flood!',1700);Sound.play('whistle')};
+ const near=()=>{const S=g.S();let best=null,bd=1e9;for(const p of g.P){if(p.st!=='wait')continue;const d=Math.hypot((p.u-b.u)*G.W,(p.v-b.v)*G.H);if(d<bd){bd=d;best=p}}return bd<70*S?best:null};
+ g.act=()=>{if(!g.started||g.over)return;const p=near();if(!p){if(g.seats.length)toast('Take them to the shore ←',900);return}
+  if(g.seats.length>=g.cap){toast('Boat\'s full! Drop them at the shore',1100);Sound.play('honk');return}
+  p.st='boat';g.seats.push(p);Sound.play(p.who==='cat'?'meow':'cuff');fxText(g.F,p.u*G.W,p.v*G.H-30*g.S(),p.who==='cat'?'Mew!':pick(['Thank you!','Hop in!','My hero!']),'#9effa0',15)};
+ g.jump=()=>{if(!g.started||g.over||b.bcd>0)return;b.boost=1;b.bcd=2.2;Sound.play('jump');fxText(g.F,b.u*G.W,b.v*G.H-30*g.S(),'VROOM!','#ffd23f',14)};
+ g.btns=()=>[b.bcd>0?'~BOOST':'BOOST',near()&&g.seats.length<g.cap?'RESCUE':'~RESCUE'];
+ g.hint=()=>'SWIPE &amp; HOLD TO STEER THE BOAT<br>RESCUE NEXT TO PEOPLE · BOOST TO SPEED UP';
+ g.hud=()=>`Rescued ${g.rescued}/${g.goal}  Boat ${g.seats.length}/${g.cap}`;
+ const SHORE=0.15;
+ g.update=dt=>{g.t+=dt;if(!g.started)return;const S=g.S();if(b.boost>0)b.boost-=dt;if(b.bcd>0)b.bcd-=dt;if(b.slow>0)b.slow-=dt;
+  let ax,ay;if(G.auto){[ax,ay]=g.autoplay()}else{ax=axisX();ay=axisY()}const m=Math.hypot(ax,ay);if(m>1){ax/=m;ay/=m}
+  const spd=150*S*(b.boost>0?1.6:1)*(b.slow>0?0.5:1);b.vx+=(ax*spd-b.vx)*Math.min(1,dt*3);b.vy+=(ay*spd-b.vy)*Math.min(1,dt*3);
+  const u0=b.u,v0=b.v;b.u+=b.vx*dt/G.W;b.v+=(b.vy*dt+6*S*dt)/G.H;b.u=clamp(b.u,SHORE-0.01,0.98);b.v=clamp(b.v,0.05,0.95);
+  const sp=Math.hypot(b.vx,b.vy);if(sp>12*S){const ta=Math.atan2(b.vy,b.vx);let d=ta-b.ang;while(d>Math.PI)d-=TAU;while(d<-Math.PI)d+=TAU;b.ang+=d*Math.min(1,dt*8)}
+  /* bump into flooded houses/cars/trees */
+  for(const p of g.P){const r=(p.kind==='roof'?34:p.kind==='car'?26:28)*S+14*S,dx=(b.u-p.u)*G.W,dy=(b.v-p.v)*G.H,d=Math.hypot(dx,dy);if(d<r&&d>0.01){b.u=p.u+dx/d*r/G.W;b.v=p.v+dy/d*r/G.H}}
+  /* floating logs */
+  for(const l of g.logs){l.v+=l.sp*dt;l.a+=dt*0.4;if(l.v>1.08){l.v=-0.08;l.u=rnd(0.3,0.95)}
+   const d=Math.hypot((l.u-b.u)*G.W,(l.v-b.v)*G.H);if(d<30*S&&!l.cool){l.cool=1.2;b.slow=0.8;g.bumps++;Sound.play('crash');const nx=(b.u-l.u)*G.W/d,ny=(b.v-l.v)*G.H/d;b.vx=nx*160*S;b.vy=ny*160*S;fxText(g.F,b.u*G.W,b.v*G.H-28*S,'BONK! Watch the logs!','#ffd23f',13)}
+   if(l.cool){l.cool-=dt;if(l.cool<=0)l.cool=0}}
+  /* drop off at the shore */
+  if(b.u<SHORE+0.05&&g.seats.length){for(const p of g.seats){p.st='safe';g.rescued++;g.shore.push({p,x:rnd(0.03,0.11),y:clamp(b.v+rnd(-0.06,0.06),0.08,0.92)})}Sound.play('star');fxText(g.F,b.u*G.W+30*S,b.v*G.H-30*S,g.seats.length>1?'Safe and dry!':'Safe!','#9effa0',17);g.seats=[];
+   if(g.rescued>=g.goal&&!g.over){g.over=true;const tt=g.t,st=tt<(cfg.par||90)&&g.bumps<=1?3:g.bumps<=4?2:1;setTimeout(()=>finish(true,st,`Everybody's safe! You rescued ${g.rescued} from the flood in ${Math.round(tt)} seconds. Log bumps: ${g.bumps}.`),1100)}}
+  for(const p of g.P)stepGait(p.o,0,dt,RP,true);
+  stepGait(b.o||(b.o=mkGait()),0,dt,RD,true);fxStep(g.F,dt);
+  if(!g.rain)g.rain=[];if(g.rain.length<90)for(let i=0;i<5;i++)g.rain.push({x:Math.random()*G.W,y:Math.random()*G.H,l:rnd(0.2,0.6)});for(const r of g.rain){r.l-=dt;if(r.l<0){r.x=Math.random()*G.W;r.y=Math.random()*G.H;r.l=rnd(0.2,0.6)}}};
+ g.autoplay=()=>{let tu,tv;if(g.seats.length>=g.cap||(g.seats.length&&!g.P.some(p=>p.st==='wait'))){tu=SHORE+0.02;tv=b.v}
+  else{let best=null,bd=1e9;for(const p of g.P){if(p.st!=='wait')continue;const d=Math.hypot((p.u-b.u)*G.W,(p.v-b.v)*G.H);if(d<bd){bd=d;best=p}}if(!best)return[0,0];if(near()===best){g.act();return[0,0]}tu=best.u;tv=best.v}
+  const dx=(tu-b.u)*G.W,dy=(tv-b.v)*G.H,d=Math.hypot(dx,dy);if(d<4)return[0,0];return[dx/d,dy/d]};
+ g.draw=()=>{const S=g.S(),W=G.W,H=G.H;
+  const wg=cx.createLinearGradient(0,0,0,H);wg.addColorStop(0,'#6a8a8a');wg.addColorStop(1,'#4a6a72');cx.fillStyle=wg;cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(255,255,255,.16)';cx.lineWidth=2*S;for(let i=0;i<26;i++){const y=((hash(i)*H+g.t*12*S)%H),x=hash(i+50)*W;cx.beginPath();cx.moveTo(x-14*S,y);cx.quadraticCurveTo(x,y-5*S,x+14*S,y);cx.stroke()}
+  /* shore */
+  const sx=SHORE*W;cx.fillStyle='#d8c48a';cx.beginPath();cx.moveTo(0,0);cx.lineTo(sx+8*S,0);for(let y=0;y<=H;y+=20*S)cx.lineTo(sx+8*S+Math.sin(y*0.05+g.t)*4*S,y);cx.lineTo(0,H);cx.fill();
+  cx.fillStyle='#4f9240';cx.fillRect(0,0,sx-4*S,H);cx.fillStyle='#3a3a40';cx.fillRect(sx*0.25,0,sx*0.45,H);cx.fillStyle='#f2d04a';for(let y=0;y<H;y+=40*S)cx.fillRect(sx*0.47-1.5*S,y,3*S,20*S);
+  cx.save();cx.translate(sx*0.47,H*0.22);cx.scale(S*0.7,S*0.7);cx.fillStyle='#333';cx.fillRect(-14,30,28,40);cx.fillStyle='#111';cx.fillRect(-20,52,6,12);cx.fillRect(14,52,6,12);drawJeep(cx,g.t,false);cx.restore();
+  cx.save();cx.translate(sx*0.47,H*0.78);cx.scale(S*0.7,S*0.7);drawAmb(cx,g.t);cx.restore();
+  for(const s of g.shore){cx.save();cx.translate(s.x*W,s.y*H);cx.scale(S*0.3,S*0.3);if(s.p.who==='cat')drawCat(cx,'#e8a040','sit',g.t);else{s.p.o.ov={t:'cheer'};drawPerson(cx,s.p.o,LOOK[s.p.who])}cx.restore()}
+  /* flooded things */
+  for(const p of g.P){const x=p.u*W,y=p.v*H;cx.save();cx.translate(x,y);cx.scale(S,S);
+   cx.strokeStyle='rgba(255,255,255,.25)';cx.lineWidth=2;cx.beginPath();cx.ellipse(0,4,40+Math.sin(g.t*2+p.id)*3,26,0,0,TAU);cx.stroke();
+   if(p.kind==='roof'){cx.fillStyle='rgba(0,0,0,.25)';cx.fillRect(-30,-18,64,42);cx.fillStyle=pick2(['#a83a2a','#5a6a8a','#7a5a3a','#3a6a4a'],p.id);cx.fillRect(-32,-22,64,42);cx.fillStyle='rgba(0,0,0,.22)';cx.fillRect(-32,-1,64,21);cx.fillStyle='#ddd';cx.fillRect(-33,-2,66,3);cx.fillStyle='#6a4a3a';cx.fillRect(14,-30,9,12)}
+   else if(p.kind==='car'){drawCar(cx,30,52,pick2(CARCOL,p.id+2),{});cx.fillStyle='rgba(90,120,130,.45)';cx.fillRect(-20,6,40,24)}
+   else{cx.fillStyle='rgba(0,0,0,.25)';cx.beginPath();cx.arc(4,4,28,0,TAU);cx.fill();cx.fillStyle='#2f7a32';cx.beginPath();cx.arc(0,0,28,0,TAU);cx.fill();cx.fillStyle='#3a9a3e';cx.beginPath();cx.arc(-8,-8,14,0,TAU);cx.fill()}
+   if(p.st==='wait'){cx.save();cx.scale(0.32,0.32);if(p.who==='cat')drawCat(cx,'#e8a040',Math.sin(g.t*4+p.id)>0?'sit':'fall',g.t);else{p.o.ov={t:'cheer'};drawPerson(cx,p.o,LOOK[p.who])}cx.restore();
+    if(Math.sin(g.t*5+p.id*1.3)>-0.2){cx.font='13px Lilita,system-ui,sans-serif';cx.textAlign='center';cx.lineWidth=3;cx.strokeStyle='#2a0a05';const tx=p.who==='cat'?'MEOW!':'HELP!';cx.strokeText(tx,0,-46);cx.fillStyle='#fff';cx.fillText(tx,0,-46)}}
+   cx.restore()}
+  for(const l of g.logs){cx.save();cx.translate(l.u*W,l.v*H);cx.rotate(l.a);cx.scale(S,S);cx.fillStyle='rgba(0,0,0,.25)';rr(cx,-24,-5,50,13,6);cx.fill();cx.fillStyle='#7a5230';rr(cx,-26,-7,52,14,7);cx.fill();cx.fillStyle='#c8a070';cx.beginPath();cx.ellipse(24,0,4,7,0,0,TAU);cx.fill();cx.strokeStyle='#5a3a20';cx.lineWidth=1;cx.beginPath();cx.moveTo(-18,-3);cx.lineTo(10,-3);cx.stroke();cx.restore()}
+  cx.save();cx.translate(b.u*W,b.v*H);cx.rotate(b.ang);cx.scale(S,S);drawBoatTop(cx,g.t,g.seats.map(p=>({col:p.who==='cat'?'#e8a040':(LOOK[p.who]||{}).top,hair:p.who==='cat'?'#c88030':(LOOK[p.who]||{}).hair||'#5a3a20'})),G.img.face,Math.hypot(b.vx,b.vy)>20*S);cx.restore();
+  const n=near();if(n&&g.seats.length<g.cap){cx.fillStyle='#ffd23f';const bob=Math.sin(g.t*6)*4*S,x=n.u*W,y=n.v*H-58*S+bob;cx.beginPath();cx.moveTo(x-9*S,y);cx.lineTo(x+9*S,y);cx.lineTo(x,y+14*S);cx.fill()}
+  if(g.seats.length>=g.cap&&Math.sin(g.t*6)>0){cx.font=(18*S)+'px Lilita,system-ui,sans-serif';cx.textAlign='left';cx.lineWidth=4;cx.strokeStyle='#2a0a05';cx.strokeText('← To the shore!',sx+14*S,b.v*H-40*S);cx.fillStyle='#ffd23f';cx.fillText('← To the shore!',sx+14*S,b.v*H-40*S)}
+  cx.fillStyle='rgba(20,30,60,.18)';cx.fillRect(0,0,W,H);cx.strokeStyle='rgba(200,220,255,.4)';cx.lineWidth=1;cx.beginPath();for(const r of g.rain||[]){cx.moveTo(r.x,r.y);cx.lineTo(r.x-2,r.y+10)}cx.stroke();
+  for(const p of g.F){const a=clamp(p.l/p.l0*1.6,0,1);cx.globalAlpha=a;if(p.txt){const fs=p.s*S;cx.font=fs+'px Lilita,system-ui,sans-serif';cx.textAlign='center';cx.lineWidth=fs*0.22;cx.strokeStyle='#2a0a05';cx.strokeText(p.txt,p.x,p.y);cx.fillStyle=p.c;cx.fillText(p.txt,p.x,p.y)}cx.globalAlpha=1}};
+ return g}
 /* ================= ENDING scene ================= */
 function ENDING(){const g={t:0,F:[],d:{o:mkGait()},crowd:[{o:mkGait(),L:LOOK.granny,x:-120},{o:mkGait(),L:LOOK.kid,x:-80},{o:mkGait(),L:LOOK.mom,x:-55},{o:mkGait(),L:LOOK.farmer,x:90},{o:mkGait(),L:LOOK.fire,x:130},{o:mkGait(),L:LOOK.deputy,x:170}]};
  g.update=dt=>{g.t+=dt;if(Math.random()<dt*2.5){const x=rnd(-200,200),y=rnd(-330,-200);fxBurst(g.F,x,y,26,['#ffd23f','#ff5a5a','#5ab0ff','#fff','#7aff7a'],160,1.4,2.6,60);Sound.play('pop')}fxStep(g.F,dt)};
@@ -817,6 +960,7 @@ function ENDING(){const g={t:0,F:[],d:{o:mkGait()},crowd:[{o:mkGait(),L:LOOK.gra
 /* ================= LEVELS ================= */
 const KEYS_SIDE=['<b>Touch:</b> swipe &amp; hold anywhere to walk (a long swipe runs). Swipe up or press JUMP to jump. ACTION busts or helps.','<b>Keys:</b> ← → walk, Shift run, Space bust/help, ↑ jump.','<b>Gamepad:</b> stick walk (push far to run), A bust/help, B jump.'];
 const KEYS_DRIVE=['<b>Touch:</b> swipe &amp; hold anywhere to steer. SIREN clears the road, BOOST rams.','<b>Keys:</b> arrows steer, Space siren, K boost.','<b>Gamepad:</b> stick steers, A siren, B boost.'];
+const KEYS_SHOOT=['<b>Touch:</b> swipe &amp; hold anywhere to aim. SQUIRT shoots water, RELOAD fills the tank back up.','<b>Keys:</b> arrows aim, Space squirts, K reloads.','<b>Gamepad:</b> stick aims, A squirts, B reloads.'];
 const LV=[
  {id:'l1',name:'Main Street Patrol',kind:'On foot',make:SideGame,cfg:{bg:'street_day',gy:0.87,len:2700,toast:'Patrol Main Street!',endSign:'Next Block →',
    spawns:[{t:'granny',x:330},{t:'umb',x:620},{t:'antifa',x:900},{t:'umb',x:1220},{t:'kid',x:1450,momdx:240},{t:'umb',x:1850},{t:'commie',x:2150},{t:'umb',x:2420}]},
@@ -832,6 +976,9 @@ const LV=[
    spawns:[{t:'antifa',x:420},{t:'umb',x:680},{t:'commie',x:900},{t:'farmer',x:1120},{t:'antifa',x:1380},{t:'umb',x:1600},{t:'commie',x:1850},{t:'umb',x:2080},{t:'granny',x:2250},{t:'arsonist',x:2560}]},
   story:[['Duncan','That firebug ran off toward the east side. Sun\'s goin\' down, and the troublemakers are out.'],['Duncan','Antifa run when they see me comin\'. Run after \'em! They get tired quick.'],['Duncan','Commies throw tomatoes. Jump over \'em! And don\'t let that firebug get away. He\'s the big catch tonight.']],
   how:'Chase down the Antifa, dodge commie tomatoes, help the neighbors, and catch the firebug with the gas can before the lock-up.',keys:KEYS_SIDE},
+ {id:'s1',name:'Splash Range',kind:'Shooting',make:ShootGame,cfg:{bg:'park',gy:0.88,goal:12,life:3.0,rate:1.3,goodP:0.2,par:60,toast:'Soak the bad-guy cutouts!'},
+  story:[['Deputy','Mornin\', Constable! Target practice day out at the park range.'],['Duncan','No real guns for this ol\' boy today. Just the big water cannon!'],['Duncan','Soak the cardboard umbrellas, Antifa and commies with the red bullseye. The neighbors with the green check are friends. Don\'t splash \'em!']],
+  how:'Aim at the cardboard cutouts with a red bullseye and squirt them. Don\'t splash the neighbors with the green check. Reload when the tank runs dry.',keys:KEYS_SHOOT},
  {id:'l5',name:'Rush Hour',kind:'Traffic duty',make:TrafficGame,cfg:{goal:30},
   story:[['Duncan','The stoplight at Main and Water Street is busted. Some umbrella poked it, no doubt.'],['Duncan','Guess I\'m the stoplight today. Whistle ready!'],['Duncan','Keep the cars movin\'. And when an ambulance comes, wave it right on through!']],
   how:'Swipe or press SWITCH to change which road goes. Don\'t make drivers wait too long, and never make the ambulance wait!',keys:['<b>Touch:</b> swipe ← → for the side road, ↑ ↓ for the main road, or press SWITCH.','<b>Keys:</b> Space switches, or ← → for the side road and ↑ ↓ for the main road.','<b>Gamepad:</b> A switches, or push the stick the way you want traffic to go.']},
@@ -841,6 +988,31 @@ const LV=[
  {id:'l7',name:'Kitty Rescue',kind:'Park rescue',make:CatGame,cfg:{goal:10},
   story:[['Granny','Constable! The umbrellas spooked all the kitties up into the big oak!'],['Duncan','Don\'t you worry, ma\'am. I brought my good blanket.'],['Duncan','When a kitty wiggles, it\'s about to jump. Get under it!']],
   how:'Move under the kitties and catch them in the blanket. Don\'t miss three!',keys:['<b>Touch:</b> swipe &amp; hold anywhere to move. DIVE dashes, JUMP hops.','<b>Keys:</b> ← → move, Shift runs, Space dive, ↑ jump.','<b>Gamepad:</b> stick moves, A dive, B jump.']},
+ {id:'d1',name:'Code 3: Oak Street',kind:'Jeep driving',make:DriveGame,cfg:{escort:'fire',dist:10000,speed:270,stubborn:0.18,umbs:0.16,gap:[160,260]},
+  story:[['Dispatch','Constable! Smoke over on Oak Street. Second fire this week!'],['Duncan','That firebug again, I\'d bet my bagpipes on it.'],['Duncan','More traffic today, and more stubborn red cars. Siren \'em or ram \'em. That fire truck does NOT stop!']],
+  how:'Lead the fire truck to Oak Street. Siren the cars out of the way or ram the stubborn ones off the road.',keys:KEYS_DRIVE},
+ {id:'f1',name:'Oak Street Blaze',kind:'Fire rescue',make:FireGame,cfg:{goal:14,grow:0.085,ig0:3.0,startW:[0,4],toast:'Hoses first, Constable!'},
+  story:[['Fire Chief','Duncan! This one\'s bigger than Elm Street. Same drill, run the hoses!'],['Duncan','Hydrant first, then the crew. Then we soak every window.'],['Fire Chief','Watch it! These flames grow quicker. Don\'t let \'em spread!']],
+  how:'Run the hoses to the hydrant and the crew, then aim the water into the burning windows. Put out 14 fires.',keys:['<b>Touch:</b> swipe &amp; hold to walk Duncan with the hose, press HOOK UP at the hydrant and the crew. Then swipe &amp; hold to aim the water, hold SPRAY to spray.','<b>Keys:</b> ← → walk, Space hook up, then arrows aim and Space sprays.','<b>Gamepad:</b> stick walk, A hook up, then stick aims the water.']},
+ {id:'b1',name:'Flood Rescue',kind:'Boat rescue',make:FloodGame,cfg:{towDist:5200,cap:3,par:100,logs:3},
+  story:[['Dispatch','Constable! The creek jumped its banks down by the lake. Folks are stuck on their roofs!'],['Duncan','Then hitch up the inflatable boat. The Jeep\'s towin\' it!'],['Duncan','Get the boat to the flood first. Then steer up next to folks, press RESCUE, and bring \'em to the shore. Three at a time, and watch for floatin\' logs!']],
+  how:'Tow the boat with the Jeep to the flood. Then steer the boat next to stranded folks, press RESCUE, and bring them back to the shore.',keys:['<b>Touch:</b> first drive: swipe &amp; hold to steer the Jeep, SIREN clears the road, BOOST rams. Then in the boat: swipe &amp; hold any way to steer, RESCUE picks people up, BOOST speeds up.','<b>Keys:</b> arrows steer, Space siren / rescue, K boost.','<b>Gamepad:</b> stick steers, A siren / rescue, B boost.']},
+ {id:'p1',name:'Park Patrol',kind:'On foot',make:SideGame,cfg:{bg:'park',gy:0.88,len:3100,hearts:3,toast:'Patrol the park!',endSign:'Park Gate →',umbSp:46,umbWind:0.75,
+   spawns:[{t:'granny',x:360},{t:'umb',x:620},{t:'antifa',x:860},{t:'umb',x:1100},{t:'kid',x:1320,momdx:260},{t:'commie',x:1700},{t:'umb',x:1940},{t:'antifa',x:2180},{t:'farmer',x:2400},{t:'umb',x:2620},{t:'commie',x:2860}]},
+  story:[['Duncan','The floodwater\'s goin\' down. Time to check on the park.'],['Duncan','Umbrellas love a soggy day. And I see Antifa and commies hidin\' behind the big oak.'],['Duncan','Help the neighbors, bust the troublemakers, and make it to the park gate!']],
+  how:'Walk through the park. Bust umbrellas, Antifa and commies, and help the neighbors who need you.',keys:KEYS_SIDE},
+ {id:'s2',name:'Fair Night Squirt Gallery',kind:'Shooting',make:ShootGame,cfg:{bg:'square',gy:0.83,dim:'rgba(10,8,40,.28)',goal:18,move:true,life:2.4,rate:1.0,rateMin:0.5,goodP:0.3,maxUp:5,par:75,toast:'Moving targets! Watch for neighbors!'},
+  story:[['Mayor','Constable! The county fair\'s in town, and the squirt gallery needs a champion.'],['Duncan','Moving targets, eh? I\'ve chased faster umbrellas than these.'],['Duncan','Same rules. Red bullseye gets soaked. Green check is a neighbor. Don\'t splash Granny!']],
+  how:'The cutouts slide back and forth now. Soak 18 bad guys with a red bullseye and keep the neighbors dry.',keys:KEYS_SHOOT},
+ {id:'f2',name:'Night Blaze',kind:'Fire rescue',make:FireGame,cfg:{goal:16,night:true,grow:0.09,ig0:2.8,igMin:1.5,startW:[2,6],toast:'Night fire! Run the hose!'},
+  story:[['Dispatch','Constable, a fire\'s broke out on Water Street. In the middle of the night!'],['Duncan','I was just about to get my beauty sleep. Let\'s go!'],['Fire Chief','It\'s dark and it\'s spreadin\' fast. Hoses, then water, quick as you can!']],
+  how:'Run the hoses, then put out 16 fires in the dark before they spread.',keys:['<b>Touch:</b> swipe &amp; hold to walk Duncan with the hose, press HOOK UP at the hydrant and the crew. Then swipe &amp; hold to aim the water, hold SPRAY to spray.','<b>Keys:</b> ← → walk, Space hook up, then arrows aim and Space sprays.','<b>Gamepad:</b> stick walk, A hook up, then stick aims the water.']},
+ {id:'d2',name:'Five-Alarm Run',kind:'Jeep driving',make:DriveGame,cfg:{escort:'fire',dist:12000,speed:285,stubborn:0.22,umbs:0.2,gap:[140,240],night:true},
+  story:[['Dispatch','All units! FIVE ALARMS at the old mill! Every truck in the county is rollin\'!'],['Duncan','Rain, dark, and traffic. Of course.'],['Duncan','Longest run yet. Keep that fire truck movin\' and don\'t you let it get stuck!']],
+  how:'The longest drive yet, at night in the rain. Clear the road so the fire truck never gets stuck.',keys:KEYS_DRIVE},
+ {id:'f3',name:'The Big One',kind:'Fire rescue',make:FireGame,cfg:{goal:20,grow:0.1,spreadT:5,maxBurn:5,ig0:2.6,igMin:1.3,startW:[1,3],toast:'Windy! Fires spread fast!'},
+  story:[['Fire Chief','This is the big one, Duncan. The wind\'s pushin\' the flames from window to window!'],['Duncan','Then we push back harder. Run the hoses!'],['Duncan','And that fella with the gas can... I KNOW I saw a scooter parked out back.']],
+  how:'The wind spreads fire fast. Run the hoses, then put out 20 fires. Hit the biggest flames first!',keys:['<b>Touch:</b> swipe &amp; hold to walk Duncan with the hose, press HOOK UP at the hydrant and the crew. Then swipe &amp; hold to aim the water, hold SPRAY to spray.','<b>Keys:</b> ← → walk, Space hook up, then arrows aim and Space sprays.','<b>Gamepad:</b> stick walk, A hook up, then stick aims the water.']},
  {id:'l8',name:'Catch the Firebug',kind:'Jeep chase',make:DriveGame,cfg:{chase:true,speed:290,stubborn:0.1,umbs:0.1,gap:[190,300]},
   story:[['Duncan','There he is! The firebug, on a little scooter, with a brand new gas can!'],['Duncan','Bump that scooter three times and he\'s done. Hang on to your sporran!']],
   how:'Chase the firebug\'s scooter. Bump it three times to stop him. Cars in the way will slow you down.',keys:KEYS_DRIVE},
@@ -848,7 +1020,7 @@ const LV=[
   story:[['Duncan','The firebug talked. All the trouble comes from one place: the town square.'],['Duncan','The biggest umbrella anybody ever saw. The Great Umbrella!'],['Duncan','When it pops open, a big gust rolls along the ground. Jump over it! Then while it\'s stuck open and dizzy, run in and strap it shut. Four straps!']],
   how:'Jump over the gusts when the Great Umbrella pops open. While it\'s dizzy, run in and bust it. Four times!',keys:KEYS_SIDE},
 ];
-const ENDING_STORY=[['Mayor','Constable Duncan! The Great Umbrella is folded, the firebug is locked up, and the kitties are home safe.'],['Mayor','On behalf of Flemingsburg: thank you!'],['Duncan','Just doin\' my job. Now... anybody seen my bagpipes?'],['Duncan','THE END. Thanks for playin\'!']];
+const ENDING_STORY=[['Mayor','Constable Duncan! The Great Umbrella is folded, the firebug is locked up, and the kitties are home safe, and everybody\'s dry after the flood.'],['Mayor','On behalf of Flemingsburg: thank you!'],['Duncan','Just doin\' my job. Now... anybody seen my bagpipes?'],['Duncan','THE END. Thanks for playin\'!']];
 /* ================= TITLE ================= */
 function drawTitle(){const img=G.img.cover;cx.save();cx.filter='blur(14px) brightness(0.45)';const sc=Math.max(G.W/img.width,G.H/img.height)*1.1;cx.drawImage(img,(G.W-img.width*sc)/2,(G.H-img.height*sc)/2,img.width*sc,img.height*sc);cx.restore();
  const b=$('titleBtns').getBoundingClientRect();let R;if(G.land)R={x:10,y:10,w:b.left-24,h:G.H-20};else R={x:8,y:8,w:G.W-16,h:b.top-20};
