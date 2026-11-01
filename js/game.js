@@ -7,11 +7,15 @@ const cv=$('cv'),cx=cv.getContext('2d');
 const G={W:0,H:0,dpr:1,land:false,mode:'loading',lv:0,game:null,keys:{},pad:{ax:0,ay:0,btn:{},prev:{}},ptr:new Map(),paused:false,t:0,img:{},auto:false,
  stars:(()=>{try{return JSON.parse(localStorage.getItem('cd_stars')||'{}')}catch(e){return{}}})()};
 function saveStars(){try{localStorage.setItem('cd_stars',JSON.stringify(G.stars))}catch(e){}}
-function resize(){G.dpr=Math.min(2,devicePixelRatio||1);G.W=innerWidth;G.FH=innerHeight;G.land=G.W>G.FH;
+/* Peter Oct 31 9:12 PM: iPhone cutoff fix - size to the VISIBLE viewport, re-check often */
+function viewWH(){const vv=window.visualViewport,de=document.documentElement;let w=innerWidth||de.clientWidth,h=innerHeight||de.clientHeight;
+ if(de.clientHeight>0)h=Math.min(h,de.clientHeight);if(vv&&vv.scale>0.99&&vv.scale<1.01){w=Math.min(w,vv.width)||w;h=Math.min(h,vv.height)||h}return[Math.max(1,Math.round(w)),Math.max(1,Math.round(h))]}
+function resize(){G.dpr=Math.min(2,devicePixelRatio||1);[G.W,G.FH]=viewWH();G.land=G.W>G.FH;
  /* portrait play: game on top (62%), control panel below it (same split as Hair Mob) */
  G.H=(!G.land&&typeof padOn==='function'&&padOn())?Math.round(G.FH*0.62):G.FH;cv.style.height=G.H+'px';cv.width=Math.round(G.W*G.dpr);cv.height=Math.round(G.H*G.dpr);if(typeof layoutPad==='function')layoutPad();
  document.body.classList.toggle('land',G.land);document.body.classList.toggle('port',!G.land);if(G.game&&G.game.resize)G.game.resize()}
 addEventListener('resize',resize);addEventListener('orientationchange',()=>setTimeout(resize,120));resize();
+if(window.visualViewport)visualViewport.addEventListener('resize',()=>resize());setInterval(()=>{const [a,b]=viewWH();if(a!==G.W||b!==G.FH)resize()},400);
 /* ---------------- sound (WebAudio, all synthesized) ---------------- */
 const Sound=(()=>{let ac=null,master=null,mus=null,on=true,musOn=false,nextT=0,step=0,timer=null,hiss=null,sirenN=null;
  try{on=localStorage.getItem('cd_sound')!=='0'}catch(e){}
