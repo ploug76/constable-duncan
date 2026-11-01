@@ -292,14 +292,13 @@ function padOn(){return G.mode==='play'||G.mode==='result'}
 function layoutPad(){const pad=$('pad'),ba=$('bAct'),bj=$('bJump'),hint=$('swipeHint'),SB=8;
  if(!G.land){const top=G.H,ph=G.FH-top;pad.style.top=top+'px';pad.style.height=ph+'px';
   const big=Math.round(clamp(ph*0.36,92,124)),sm=Math.round(big*0.84),bot=Math.round(clamp(ph*0.14,18,46))+SB;
-  /* Peter Oct 30 9:40 PM: cluster like his screenshot - JUMP big orange far bottom-right, ACTION smaller green up-left of it */
-  Object.assign(bj.style,{width:big+'px',height:big+'px',left:'',right:'16px',bottom:bot+'px'});
-  Object.assign(ba.style,{width:sm+'px',height:sm+'px',left:'',right:(16+big+14)+'px',bottom:(bot+big*0.42)+'px'});
-  if(bot+big*0.42+sm>ph-8)ba.style.bottom=(ph-sm-8)+'px';
+  /* Peter Oct 31 9:10 PM: NES pad - ACTION (green) left, JUMP (orange) right, level, both the old ACTION size */
+  Object.assign(bj.style,{width:sm+'px',height:sm+'px',left:'',right:'16px',bottom:bot+'px'});
+  Object.assign(ba.style,{width:sm+'px',height:sm+'px',left:'',right:(16+sm+18)+'px',bottom:bot+'px'});bj.style.setProperty('font-size',Math.round(Math.min(25,sm*0.27))+'px','important');ba.style.setProperty('font-size',Math.round(Math.min(18,sm*0.19))+'px','important');
   hint.style.display='';Object.assign(hint.style,{top:'12px',left:'14px',right:'14px'})}
  else{pad.style.top='0';pad.style.height=G.H+'px';const big=Math.round(clamp(G.H*0.21,72,96)),sm=Math.round(big*0.82);
-  Object.assign(bj.style,{width:big+'px',height:big+'px',left:'',right:'14px',bottom:'12px'});
-  Object.assign(ba.style,{width:sm+'px',height:sm+'px',left:'',right:(14+big+10)+'px',bottom:(12+big*0.18)+'px'});
+  Object.assign(bj.style,{width:sm+'px',height:sm+'px',left:'',right:'14px',bottom:'12px'});
+  Object.assign(ba.style,{width:sm+'px',height:sm+'px',left:'',right:(14+sm+16)+'px',bottom:12+'px'});bj.style.setProperty('font-size',Math.round(Math.min(25,sm*0.27))+'px','important');ba.style.setProperty('font-size',Math.round(Math.min(18,sm*0.19))+'px','important');
   hint.style.display='none'}}
 let padLbl='';
 function padSync(){const pad=$('pad'),vis=G.mode==='play'&&!G.paused&&!!G.game;if(pad.hidden===vis)pad.hidden=!vis;document.body.classList.toggle('padmode',padOn()&&!G.land);
