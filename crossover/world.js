@@ -7,7 +7,7 @@ export function createWorld() {
   return {
     t: 0,
     who: 'hope',
-    p: {x: 78, y: 0, vy: 0, face: 1, runT: 0, runDir: 0},
+    p: {x: 78, y: 0, vy: 0, face: 1, runT: 0, runDir: 0, carry: 0, carryT: 0},
     evils: [
       {id: 'low', x: 132, y: -52, r: 22, home: 132, vx: 0, vy: 0, aside: false, knock: false, fade: 1},
       {id: 'high', x: 292, y: -158, r: 22, home: 292, vx: 0, vy: 0, aside: false, knock: false, fade: 1}
@@ -70,6 +70,13 @@ export function beginForgiveness(w) {
   w.punchT = 0;
   w.punchHitDone = false;
   w.forgiveSpent = false;
+  w.p.carryT = 0;
+  w.p.carry = 0;
+  if (!w.rival.forgiven) {
+    const dx = w.rival.x - w.p.x;
+    const reach = w.p.x >= LAYOUT.cliff1 ? 420 : 240;
+    if (Math.abs(dx) > 12 && Math.abs(dx) < reach) w.p.face = Math.sign(dx);
+  }
   w.pony.phase = 'coil';
   w.pony.t = 0;
   w.pony.u = 0;
@@ -127,10 +134,10 @@ function tryLasso(w) {
   const c = w.criminal;
   const dx = (c.x - p.x) * p.face;
   const dist = Math.hypot(c.x - p.x, (c.y - 40) - (p.y - 70));
-  const canCatch = !c.captured && !c.busted && dx > -48 && dist < LAYOUT.lassoCatch && p.y > -30;
-  const canSwing = p.x >= LAYOUT.swingX0 && p.x <= LAYOUT.swingX1 && p.y >= -8 && p.face > 0 && onSolid(p.x);
+  const canCatch = !c.captured && !c.busted && dx > -48 && dist < LAYOUT.lassoCatch && p.y > -40;
+  const canSwing = p.x >= LAYOUT.swingX0 && p.x <= LAYOUT.cliff0 && p.y > -40 && p.face > 0 && (onSolid(p.x) || p.y < 0);
   w.stats.lassos += 1;
-  if (canCatch && !(canSwing && dist > 90)) {
+  if (canCatch && !(canSwing && (p.x >= LAYOUT.lip || dist > 110))) {
     w.lasso = {kind: 'catch', u: 0, t: 0};
     w.pony.phase = 'lasso';
     return true;
@@ -189,10 +196,20 @@ function tryJump(w) {
 }
 
 function speedFor(w, input, dt) {
-  const dir = input.dir || 0;
-  if (!dir) { w.p.runT = 0; w.p.runDir = 0; return 0; }
-  if (dir !== w.p.runDir) { w.p.runDir = dir; w.p.runT = 0; }
-  w.p.runT += dt;
+  let dir = input.dir || 0;
+  if (dir) {
+    w.p.carry = dir;
+    w.p.carryT = TIMING.carry;
+    if (dir !== w.p.runDir) { w.p.runDir = dir; w.p.runT = 0; }
+    w.p.runT += dt;
+  } else if (w.p.carryT > 0) {
+    w.p.carryT -= dt;
+    dir = w.p.carryT > 0 ? w.p.carry : 0;
+  } else {
+    w.p.runT = 0;
+    w.p.runDir = 0;
+  }
+  if (!dir) return 0;
   const run = !!(input.run || w.p.runT > DUNCAN.runHold);
   return dir * (run ? DUNCAN.run : DUNCAN.walk);
 }
@@ -223,6 +240,11 @@ function movePlayer(w, dt, input) {
   const B = LAYOUT.barrier;
   const feetClear = w.p.y < -B.h;
   if (!feetClear && x > B.x0 && x < B.x1) x = w.p.x < B.x0 ? B.x0 - 0.4 : B.x1 + 0.4;
+  const airborne = w.p.y < -0.5 || w.p.vy < 0;
+  if (!airborne) {
+    if (w.p.x <= LAYOUT.cliff0 && x > LAYOUT.cliff0 - 1) x = LAYOUT.cliff0 - 1;
+    if (w.p.x >= LAYOUT.cliff1 && x < LAYOUT.cliff1 + 1) x = LAYOUT.cliff1 + 1;
+  }
   w.p.x = Math.max(24, Math.min(LAYOUT.farEnd - 20, x));
   const solid = onSolid(w.p.x);
   if (solid) {
@@ -288,15 +310,21 @@ function advanceAttack(w, dt) {
     w.pony.u = Math.min(1, w.pony.t / TIMING.unroll);
     if (!w.forgiveSpent && forgivenessWindow(w.pony.u)) {
       const pts = currentHair(w);
-      const hit = hairHitsCircle(pts, w.p.x, w.p.y, w.p.face, {x: w.rival.x, y: w.rival.y - 52, r: w.rival.r}, 12);
-      if (hit.hit && !w.rival.forgiven) {
+      const rivalBody = {x: w.rival.x, y: w.rival.y - 52, r: w.rival.r};
+      const hit = hairHitsCircle(pts, w.p.x, w.p.y, w.p.face, rivalBody, 16);
+      const rdx = (w.rival.x - w.p.x) * w.p.face;
+      const reach = w.p.x >= LAYOUT.cliff1 ? 280 : 175;
+      const close = rdx > -36 && Math.hypot(w.rival.x - w.p.x, rivalBody.y - (w.p.y - 60)) < reach;
+      if ((hit.hit || close) && !w.rival.forgiven) {
         w.forgiveSpent = true;
         w.stats.forgivenessContacts += 1;
         w.rival.forgiven = true;
         w.rival.vx = w.p.face * 150;
         w.rival.flash = 0.7;
-        w.blast = {x: hit.x, y: hit.y, l: 0.7, l0: 0.7};
-        fx(w, hit.x, hit.y - 28, 'FORGIVENESS', '#fff4b0', 20);
+        const bx = hit.hit ? hit.x : w.rival.x;
+        const by = hit.hit ? hit.y : rivalBody.y;
+        w.blast = {x: bx, y: by, l: 0.7, l0: 0.7};
+        fx(w, bx, by - 28, 'FORGIVENESS', '#fff4b0', 20);
       }
     }
     if (w.pony.t >= TIMING.unroll) {

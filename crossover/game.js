@@ -1,4 +1,4 @@
-import { TIMING } from './mechanics.js';
+import { TIMING, controlLayout } from './mechanics.js';
 import { createTapCombo } from './tap.js';
 import { beginForgiveness, createWorld, goals, goalsMet, queuePunches, stepWorld } from './world.js';
 import { drawFrame, syncGait } from './draw.js';
@@ -36,10 +36,11 @@ function resize() {
   if (vv) { w = Math.min(w, vv.width); h = Math.min(h, vv.height); }
   w = Math.max(1, Math.round(w));
   h = Math.max(1, Math.round(h));
-  land = w > h;
+  const lay = controlLayout(w, h);
+  land = !lay.portrait;
   dpr = Math.min(2, devicePixelRatio || 1);
-  const ch = land || mode !== 'play' ? h : Math.round(h * 0.62);
-  document.body.classList.toggle('portrait', !land);
+  const ch = lay.split && mode === 'play' ? Math.round(h * lay.canvasFrac) : h;
+  document.body.classList.toggle('portrait', lay.portrait);
   syncChrome();
   cv.style.height = ch + 'px';
   cv.width = Math.round(w * dpr);
@@ -143,7 +144,7 @@ function goalLine() {
 
 function refreshHud() {
   const hope = world.who === 'hope';
-  $('who').textContent = (hope ? 'Hope' : 'Constable Duncan') + '   ·   tap window 0.34s';
+  $('who').textContent = (hope ? 'Hope' : 'Constable Duncan') + '   ·   tap window ' + (TIMING.tapWindowMs / 1000).toFixed(2) + 's';
   $('goals').textContent = goalLine();
   let phase = '';
   if (world.pony.phase === 'coil') phase = 'COILING';
@@ -168,7 +169,7 @@ function refreshHud() {
 function syncChrome() {
   $('title').hidden = mode !== 'title';
   $('hud').hidden = mode !== 'play';
-  $('pad').hidden = !(mode === 'play' && !land);
+  $('pad').hidden = mode !== 'play';
   document.body.classList.toggle('playing', mode === 'play');
 }
 function startPlay() {

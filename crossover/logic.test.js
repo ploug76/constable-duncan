@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createTapCombo } from './tap.js';
 import {
   DUNCAN, HOPE_HEAD, LAYOUT, TIMING,
-  forgivenessWindow, hairHitsCircle, jumpApex, pointsSpread, ponytailPoints, ponytailTip,
+  controlLayout, forgivenessWindow, hairHitsCircle, jumpApex, pointsSpread, ponytailPoints, ponytailTip,
   runJumpDistance, swingPoint
 } from './mechanics.js';
 import { beginForgiveness, createWorld, goals, queuePunches, stepWorld } from './world.js';
@@ -69,9 +69,9 @@ test('taps spaced past the window are separate singles, not a triple', () => {
 test('a late tap resolves the earlier one instead of merging into a triple', () => {
   const { combo, events } = taps();
   combo.press(0);
-  combo.press(400);
+  combo.press(TIMING.tapWindowMs + 80);
   assert.deepEqual(events, ['single']);
-  combo.tick(400 + TIMING.tapWindowMs);
+  combo.tick(TIMING.tapWindowMs + 80 + TIMING.tapWindowMs);
   assert.deepEqual(events, ['single', 'single']);
 });
 
@@ -372,4 +372,111 @@ test('a punch from too far does not hit, so forgiveness is the reaching attack',
   settle(w, 16);
   assert.equal(w.stats.punchHits, 0);
   assert.equal(w.rival.forgiven, false);
+});
+
+test('three thumb taps 0.40s apart still count as one forgiveness', () => {
+  const { combo, events } = taps();
+  combo.press(0);
+  combo.press(400);
+  combo.press(800);
+  combo.tick(800 + TIMING.tapWindowMs);
+  assert.deepEqual(events, ['triple']);
+  assert.ok(TIMING.tapWindowMs >= 450);
+});
+
+test('phone layouts keep touch buttons in portrait and landscape', () => {
+  const phones = [[412, 915], [480, 1044], [384, 832], [915, 412], [1044, 480]];
+  for (const [w, h] of phones) {
+    const lay = controlLayout(w, h);
+    assert.equal(lay.pad, true, w + 'x' + h);
+    assert.equal(lay.split, h > w, w + 'x' + h);
+    assert.equal(lay.canvasFrac, h > w ? 0.62 : 1);
+  }
+  assert.equal(controlLayout(1280, 800).split, false);
+  assert.equal(controlLayout(1280, 800).pad, true);
+});
+
+test('a released swipe still carries a jump over the barrier', () => {
+  const w = createWorld();
+  w.p.x = 150;
+  w.p.runT = 0.3;
+  stepWorld(w, 0.05, {dir: 1, run: true});
+  const before = w.p.x;
+  stepWorld(w, 0.05, {jump: true});
+  let cleared = false;
+  for (let i = 0; i < 16; i++) {
+    stepWorld(w, 0.05, {});
+    if (w.p.x > LAYOUT.barrier.x1) cleared = true;
+  }
+  assert.ok(before < LAYOUT.barrier.x0);
+  assert.equal(cleared, true);
+  assert.equal(w.falls, 0);
+});
+
+test('walking stops at the ravine lip and a lasso there swings across', () => {
+  const w = createWorld();
+  w.criminal.captured = true;
+  w.p.x = 360;
+  settle(w, 30, {dir: 1, run: true});
+  assert.ok(w.p.x <= LAYOUT.cliff0);
+  assert.equal(w.falls, 0);
+  assert.ok(w.p.x >= LAYOUT.swingX0);
+  stepWorld(w, 0.05, {lasso: true});
+  settle(w, 40);
+  assert.equal(w.crossed, true);
+  assert.ok(w.p.x >= LAYOUT.cliff1);
+  assert.equal(w.falls, 0);
+});
+
+test('a triple tap past the rival still lands one forgiveness and no extra punches', () => {
+  const w = createWorld();
+  w.p.x = 1040;
+  w.p.face = 1;
+  queuePunches(w, 2);
+  assert.equal(beginForgiveness(w), true);
+  assert.equal(w.p.face, -1);
+  assert.equal(w.pending, 0);
+  settle(w, 30);
+  assert.equal(w.stats.punchesStarted, 0);
+  assert.equal(w.stats.forgivenessStarts, 1);
+  assert.equal(w.stats.forgivenessContacts, 1);
+  assert.equal(w.rival.forgiven, true);
+});
+
+test('mobile touch route clears the barrier, ravine, umbrella, and forgiveness', () => {
+  const w = createWorld();
+  stepWorld(w, 0.05, {pray: true});
+  settle(w, 24);
+  assert.equal(w.evils[0].aside, true);
+  for (let i = 0; i < 40 && w.p.x < 165; i++) stepWorld(w, 0.05, {dir: 1});
+  assert.ok(w.p.x < LAYOUT.barrier.x0);
+  stepWorld(w, 0.05, {jump: true});
+  settle(w, 14);
+  assert.ok(w.p.x > LAYOUT.barrier.x1, 'carry jump cleared barrier at ' + w.p.x);
+  stepWorld(w, 0.05, {lasso: true});
+  settle(w, 16);
+  assert.equal(w.criminal.how, 'lasso');
+  if (!w.evils[1].aside) {
+    stepWorld(w, 0.05, {grace: true});
+    settle(w, 20);
+  }
+  assert.equal(w.evils[1].aside, true);
+  settle(w, 40, {dir: 1, run: true});
+  assert.ok(w.p.x <= LAYOUT.cliff0);
+  assert.equal(w.falls, 0);
+  stepWorld(w, 0.05, {switchTo: 'duncan'});
+  stepWorld(w, 0.05, {act: true});
+  assert.equal(w.umb.folded, true);
+  stepWorld(w, 0.05, {switchTo: 'hope'});
+  stepWorld(w, 0.05, {lasso: true});
+  settle(w, 40);
+  assert.equal(w.crossed, true);
+  settle(w, 24, {dir: 1, run: true});
+  queuePunches(w, 1);
+  beginForgiveness(w);
+  settle(w, 30);
+  assert.equal(w.stats.forgivenessContacts, 1);
+  assert.equal(w.stats.punchesStarted, 0);
+  const g = goals(w);
+  assert.equal(g.prayer && g.grace && g.criminal && g.umbrella && g.ravine && g.forgiven, true);
 });

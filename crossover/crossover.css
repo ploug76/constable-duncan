@@ -5,12 +5,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:#140c1e;color:#fff;fon
 body.portrait #cv{height:62%}
 #hud{position:fixed;left:0;right:0;top:0;z-index:5;padding:8px 10px 0;display:flex;flex-direction:column;gap:4px;pointer-events:none;text-shadow:0 2px 0 #000}
 #who{font-size:20px;color:#ffd23f}
-#outfit{font-size:13px;color:#ffe08a;font-family:system-ui,sans-serif;font-weight:700}
 #goals{font-size:16px;line-height:1.35;background:rgba(12,6,18,.72);display:inline-block;padding:3px 8px;border-radius:8px}
 #phase{align-self:center;margin-top:8px;font-size:28px;color:#fff6c8;letter-spacing:1px;min-height:34px;text-align:center}
 #phase.on{font-size:40px;text-shadow:0 3px 0 #6a3a10,0 0 12px #000}
-#keys{position:fixed;left:8px;right:8px;bottom:8px;font-family:system-ui,sans-serif;font-size:13px;font-weight:700;line-height:1.35;background:rgba(20,10,28,.78);border:2px solid #ffd23f;border-radius:10px;padding:6px 8px;pointer-events:none}
+#keys{font-family:system-ui,sans-serif;font-size:13px;font-weight:700;line-height:1.35;background:rgba(20,10,28,.78);border:2px solid #ffd23f;border-radius:10px;padding:6px 8px;max-width:920px}
 body.portrait #keys{display:none}
+@media (max-height: 520px){#keys{display:none}}
 #title,#win{position:fixed;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;background:rgba(12,6,18,.72);padding:12px}
 #title[hidden],#win[hidden],#pad[hidden],#hud[hidden]{display:none!important}
 .card{width:min(640px,96vw);max-height:94vh;overflow:auto;background:linear-gradient(#3a2850,#22162e);border:3px solid #ffd23f;border-radius:18px;padding:14px 16px 16px}
@@ -27,3 +27,12 @@ button.big{font-size:28px;min-width:200px}
 #bJump{grid-column:3/5;background:radial-gradient(circle at 35% 30%,#ffe0b0,#e07010);color:#fff;border-color:#fff;font-size:22px}
 #pad button.dim{opacity:.38}
 #bStart{margin-top:8px}
+body.playing:not(.portrait) #pad{top:0;bottom:0;height:auto;display:block;background:transparent;border:0;pointer-events:none;padding:0}
+body.playing:not(.portrait) #hint{display:none}
+body.playing:not(.portrait) #pad button{position:absolute;pointer-events:auto;width:86px;height:64px;min-height:64px}
+body.playing:not(.portrait) #bPray{left:12px;bottom:148px}
+body.playing:not(.portrait) #bGrace{left:12px;bottom:76px}
+body.playing:not(.portrait) #bLasso{left:108px;bottom:148px}
+body.playing:not(.portrait) #bSwitch{left:108px;bottom:76px}
+body.playing:not(.portrait) #bPunch{right:118px;bottom:18px;width:100px;height:100px;border-radius:50%}
+body.playing:not(.portrait) #bJump{right:14px;bottom:18px;width:100px;height:100px;border-radius:50%}

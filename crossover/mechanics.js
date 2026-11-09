@@ -2,7 +2,8 @@
 export const TAU = Math.PI * 2;
 
 export const TIMING = {
-  tapWindowMs: 340,
+  tapWindowMs: 450,
+  carry: 0.5,
   coil: 0.48,
   unroll: 0.62,
   punch: 0.22,
@@ -50,8 +51,9 @@ export const LAYOUT = {
   swing: {x0: 392, y0: 0, x1: 546, y1: -248, x2: 712, y2: 0},
   farEnd: 1160,
   lassoCatch: 160,
-  swingX0: 330,
-  swingX1: 398
+  swingX0: 300,
+  swingX1: 400,
+  lip: 340
 };
 
 export const HOPE_HEAD = {x: 4, y: -92};
@@ -181,6 +183,13 @@ export function jumpApex() {
 export function runJumpDistance() {
   const air = (2 * -DUNCAN.jumpVy) / DUNCAN.grav;
   return DUNCAN.run * air;
+}
+
+/** Phone and desktop controls. Portrait splits the screen so buttons sit below play.
+    Landscape, including a Galaxy S25 Ultra turned sideways, keeps the full picture and overlays the buttons. */
+export function controlLayout(w, h) {
+  const portrait = h > w;
+  return {portrait, pad: true, split: portrait, canvasFrac: portrait ? 0.62 : 1};
 }
 
 export function onSolid(x) {
