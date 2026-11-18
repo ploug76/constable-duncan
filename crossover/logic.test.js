@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { createTapCombo } from './tap.js';
 import {
   DUNCAN, HOPE_HEAD, LAYOUT, TIMING,
-  controlLayout, forgivenessWindow, hairHitsCircle, jumpApex, pointsSpread, ponytailPoints, ponytailTip,
-  runJumpDistance, swingPoint
+  buttonLayout, controlLayout, forgivenessWindow, hairHitsCircle, jumpApex, pointsSpread, ponytailPoints, ponytailTip,
+  runJumpDistance, swingPoint, viewOf
 } from './mechanics.js';
 import { beginForgiveness, createWorld, goals, queuePunches, stepWorld } from './world.js';
 
@@ -479,4 +479,98 @@ test('mobile touch route clears the barrier, ravine, umbrella, and forgiveness',
   assert.equal(w.stats.punchesStarted, 0);
   const g = goals(w);
   assert.equal(g.prayer && g.grace && g.criminal && g.umbrella && g.ravine && g.forgiven, true);
+});
+
+test('phone view uses the original side-scroller scale so the ravine is on screen', () => {
+  const phones = [
+    [412, Math.round(915 * 0.62), false],
+    [480, Math.round(1044 * 0.62), false],
+    [915, 412, true],
+    [1044, 480, true]
+  ];
+  for (const [w, h, land] of phones) {
+    const v = viewOf(w, h, land);
+    const cam = (LAYOUT.cliff0 - 1) - v.vw * (land ? 0.36 : 0.34);
+    const see = x => x >= cam - 1 && x <= cam + v.vw + 1;
+    assert.equal(see(332), true, w + 'x' + h + ' sees the umbrella');
+    assert.equal(see(LAYOUT.cliff0), true, w + 'x' + h + ' sees the lip');
+    assert.ok(cam + v.vw > LAYOUT.cliff0 + 120, w + 'x' + h + ' sees into the ravine');
+  }
+});
+
+test('touch buttons stay on screen and match the original ACTION-left JUMP-right pad', () => {
+  const phones = [[412, 915], [480, 1044], [384, 832], [915, 412], [1044, 480], [1280, 800]];
+  for (const [w, h] of phones) {
+    const b = buttonLayout(w, h);
+    const boxes = [b.jump, b.act, ...b.hope];
+    for (const box of boxes) {
+      assert.ok(box.x >= 0 && box.y >= 0, box.id);
+      assert.ok(box.x + box.w <= w + 1, box.id + ' right');
+      assert.ok(box.y + box.h <= h + 1, box.id + ' bottom');
+      assert.ok(box.w >= 64 && box.h >= 64, box.id + ' tap size');
+    }
+    assert.equal(b.jump.w, b.act.w);
+    assert.equal(b.jump.h, b.act.h);
+    assert.equal(b.jump.round, true);
+    assert.ok(b.act.x + b.act.w <= b.jump.x, 'ACTION sits left of JUMP');
+    if (h > w) {
+      assert.ok(b.jump.y >= h * 0.62, 'portrait buttons sit in the lower panel');
+      assert.ok(b.hope[0].y >= h * 0.62);
+    } else {
+      assert.ok(b.hope[0].y + b.hope[0].h < h * 0.55, 'landscape hope buttons stay off the ground');
+      assert.ok(b.jump.y > h * 0.5, 'landscape jump stays in the lower half');
+    }
+  }
+});
+
+test('the umbrella stands beside the lip, inside ACTION range and outside the body', () => {
+  const w = createWorld();
+  const lip = LAYOUT.cliff0 - 1;
+  const gap = Math.abs(w.umb.x - lip);
+  assert.ok(gap < DUNCAN.bustUmbCreep, 'ACTION at the lip still folds it');
+  assert.ok(gap > 36, 'Hope is not drawn inside the canopy');
+  w.who = 'duncan';
+  w.criminal.captured = true;
+  w.p.x = lip;
+  stepWorld(w, 0.05, {act: true});
+  assert.equal(w.umb.folded, true);
+});
+
+test('a lasso at the lip swings across even when Hope is facing back', () => {
+  const w = createWorld();
+  w.criminal.captured = true;
+  w.p.x = 390;
+  w.p.face = -1;
+  stepWorld(w, 0.05, {lasso: true});
+  settle(w, 40);
+  assert.equal(w.p.face, 1);
+  assert.equal(w.crossed, true);
+  assert.equal(w.falls, 0);
+});
+
+test('prayer still hits the low evil after a phone run carries past it', () => {
+  const w = createWorld();
+  w.p.x = 186;
+  w.p.face = 1;
+  stepWorld(w, 0.05, {pray: true});
+  assert.equal(w.p.face, -1);
+  settle(w, 40);
+  assert.equal(w.evils[0].aside, true);
+  assert.equal(w.evils[1].aside, false);
+});
+
+test('a held swipe cannot walk the forgiveness strike off the rival', () => {
+  const w = createWorld();
+  w.p.x = 860;
+  w.p.face = 1;
+  w.p.carry = 1;
+  w.p.carryT = 0.5;
+  assert.equal(beginForgiveness(w), true);
+  const x0 = w.p.x;
+  settle(w, 18, {dir: 1, run: true});
+  assert.equal(w.pony.phase === 'coil' || w.pony.phase === 'unroll', true);
+  assert.ok(Math.abs(w.p.x - x0) < 2);
+  assert.equal(w.stats.punchesStarted, 0);
+  assert.equal(w.stats.forgivenessContacts, 1);
+  assert.equal(w.rival.forgiven, true);
 });
